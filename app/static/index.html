@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plataforma de Rifas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header><h1>Plataforma de Rifas</h1><p>Versión principal (pago simulado)</p></header>
+  <main>
+    <section class="panel">
+      <h2>Rifas activas</h2>
+      <select id="raffleSelect"></select>
+      <p id="raffleInfo"></p>
+      <div class="actions">
+        <button class="quick" data-q="10">10</button>
+        <button class="quick" data-q="20">20</button>
+        <button class="quick" data-q="50">50</button>
+        <input id="search" placeholder="Buscar 0001" maxlength="4" />
+      </div>
+      <div id="grid" class="grid"></div>
+      <p id="selInfo"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Checkout</h2>
+      <form id="checkout">
+        <input name="document" placeholder="Documento" required />
+        <input name="first_name" placeholder="Nombre" required />
+        <input name="last_name" placeholder="Apellido" required />
+        <input type="email" name="email" placeholder="Correo" required />
+        <input name="phone" placeholder="Celular" required />
+        <input name="city" placeholder="Ciudad" />
+        <button type="submit">Pagar simulado</button>
+      </form>
+      <p id="msg"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Consulta tus entradas</h2>
+      <div class="actions"><input id="lookup" placeholder="Correo o documento" /><button id="lookupBtn">Consultar</button></div>
+      <ul id="lookupOut"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Admin</h2>
+      <h3>Crear rifa</h3>
+      <form id="createRaffle">
+        <input name="title" placeholder="Título" required />
+        <input name="main_prize" placeholder="Premio principal" required />
+        <input name="total_numbers" type="number" placeholder="Total números" required />
+        <input name="ticket_price" type="number" placeholder="Precio" required />
+        <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
+        <button type="submit">Crear</button>
+      </form>
+      <h3>Ganadores</h3>
+      <form id="winnersForm">
+        <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
+        <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
+        <button type="submit">Publicar</button>
+      </form>
+      <div id="winners" class="winners"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
