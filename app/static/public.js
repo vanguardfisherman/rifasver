@@ -17,6 +17,10 @@ async function api(path, options = {}) {
   return data;
 }
 
+function formatCop(value) {
+  return `$ ${Number(value).toLocaleString('es-CO')}`;
+}
+
 function buildFilteredNumbers() {
   const filter = $('#search').value.trim();
   const max = Number(currentRaffle.total_numbers);
@@ -35,6 +39,12 @@ function renderProgress() {
   const percent = total > 0 ? Math.round((soldCount / total) * 100) : 0;
   $('#progressBar').style.width = `${percent}%`;
   $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} (${percent}%)`;
+}
+
+function syncSticky() {
+  const qty = selected.size;
+  const total = qty * Number(currentRaffle.ticket_price || 0);
+  $('#stickyInfo').textContent = `${qty} seleccionados • ${formatCop(total)}`;
 }
 
 function renderGrid() {
@@ -68,8 +78,17 @@ function renderGrid() {
   $('#pageInfo').textContent = `Página ${currentPage} de ${totalPages}`;
   $('#prevPage').disabled = currentPage <= 1;
   $('#nextPage').disabled = currentPage >= totalPages;
-  $('#selInfo').textContent = `Seleccionados: ${selected.size} • Total: $${(selected.size * Number(currentRaffle.ticket_price)).toLocaleString('es-CO')}`;
+  $('#selInfo').textContent = `Seleccionados: ${selected.size} • Total: ${formatCop(selected.size * Number(currentRaffle.ticket_price))}`;
   renderProgress();
+  syncSticky();
+}
+
+function fillPackPrices() {
+  const price = Number(currentRaffle.ticket_price || 0);
+  $('#pack2').textContent = formatCop(price * 2);
+  $('#pack5').textContent = formatCop(price * 5);
+  $('#pack10').textContent = formatCop(price * 10);
+  $('#pack100').textContent = formatCop(price * 100);
 }
 
 async function loadRaffles() {
@@ -90,11 +109,51 @@ async function onRaffleChange() {
   currentPage = 1;
   $('#search').value = '';
 
-  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio: $${Number(currentRaffle.ticket_price).toLocaleString('es-CO')} | Mínimo: ${currentRaffle.min_purchase}`;
+  $('#raffleTitle').textContent = currentRaffle.title;
+  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por número: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
   const sub = await api(`/api/raffles/${id}/subprizes`);
   $('#subprizes').innerHTML = sub.map(s => `<span class="chip">${s.name}: ${s.description}</span>`).join('');
+
+  const image = currentRaffle.image_url || 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&w=1200&q=80';
+  $('#raffleImage').src = image;
+
+  fillPackPrices();
   renderGrid();
   await renderWinners();
+}
+
+function selectRandom(qty) {
+  const available = [];
+  for (let i = 1; i <= Number(currentRaffle.total_numbers); i++) {
+    const n = pad(i);
+    if (!sold.has(n)) available.push(n);
+  }
+  selected = new Set();
+  while (selected.size < qty && available.length) {
+    const idx = Math.floor(Math.random() * available.length);
+    selected.add(available[idx]);
+    available.splice(idx, 1);
+  }
+  renderGrid();
+}
+
+function jumpToNumber() {
+  const value = $('#jumpTo').value.trim();
+  if (!value) return;
+  $('#search').value = value;
+  currentPage = 1;
+  renderGrid();
+}
+
+function selectRange() {
+  const from = Number($('#rangeFrom').value);
+  const to = Number($('#rangeTo').value);
+  if (!from || !to || to < from) return;
+  for (let i = from; i <= to; i++) {
+    const n = pad(i);
+    if (!sold.has(n)) selected.add(n);
+  }
+  renderGrid();
 }
 
 async function downloadReceipt(orderId, document) {
@@ -140,22 +199,26 @@ async function renderWinners() {
 }
 
 $('#raffleSelect').addEventListener('change', onRaffleChange);
-$('#search').addEventListener('input', () => {
-  currentPage = 1;
-  renderGrid();
-});
+$('#search').addEventListener('input', () => { currentPage = 1; renderGrid(); });
 $('#prevPage').addEventListener('click', () => { currentPage--; renderGrid(); });
 $('#nextPage').addEventListener('click', () => { currentPage++; renderGrid(); });
+$('#jumpBtn').addEventListener('click', jumpToNumber);
+$('#rangeBtn').addEventListener('click', selectRange);
+$('#random10').addEventListener('click', () => selectRandom(10));
 
-document.querySelectorAll('.quick').forEach(b => b.addEventListener('click', () => {
-  const q = Number(b.dataset.q);
+document.querySelectorAll('.pack').forEach(btn => btn.addEventListener('click', () => {
+  const qty = Number(btn.dataset.q);
   selected = new Set();
-  for (let i = 1; i <= Number(currentRaffle.total_numbers) && selected.size < q; i++) {
+  for (let i = 1; i <= Number(currentRaffle.total_numbers) && selected.size < qty; i++) {
     const n = pad(i);
     if (!sold.has(n)) selected.add(n);
   }
   renderGrid();
 }));
+
+$('#stickyCheckout').addEventListener('click', () => {
+  document.querySelector('#checkout').scrollIntoView({behavior: 'smooth', block: 'start'});
+});
 
 $('#checkout').addEventListener('submit', buy);
 $('#lookupBtn').addEventListener('click', lookup);
