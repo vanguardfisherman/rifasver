@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rifas MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>Rifas Online</h1>
+      <p class="subtitle">Tema oscuro + azul • MVP funcional</p>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Rifa activa: 🎉 Gana $4.000.000</h2>
+        <p>Valor por número: <strong>$1.000 COP</strong> • Mínimo compra: <strong>5</strong></p>
+        <div class="quick-actions">
+          <button class="quick" data-quick="10">10 entradas</button>
+          <button class="quick" data-quick="20">20 entradas</button>
+          <button class="quick" data-quick="30">30 entradas</button>
+        </div>
+        <div class="tools">
+          <input id="searchNumber" placeholder="Buscar número (ej. 0042)" maxlength="4" />
+          <button id="clearSelection">Limpiar selección</button>
+        </div>
+        <div id="numberGrid" class="number-grid"></div>
+        <p id="selectionInfo" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Checkout (pago simulado)</h2>
+        <form id="checkoutForm" class="form">
+          <div class="row"><label>Documento*</label><input name="document" required /></div>
+          <div class="row"><label>Nombre*</label><input name="firstName" required /></div>
+          <div class="row"><label>Apellido*</label><input name="lastName" required /></div>
+          <div class="row"><label>Correo*</label><input type="email" name="email" required /></div>
+          <div class="row"><label>Celular*</label><input name="phone" required /></div>
+          <button type="submit">Pagar (simulado)</button>
+        </form>
+        <p id="checkoutMsg" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Consulta tus entradas</h2>
+        <div class="tools">
+          <input id="lookup" placeholder="Correo o documento" />
+          <button id="lookupBtn">Consultar</button>
+        </div>
+        <ul id="lookupResults"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Admin (demo): definir ganadores</h2>
+        <div class="tools">
+          <input id="mainWinner" placeholder="Número ganador principal (0001+)" maxlength="4" />
+          <input id="subWinner" placeholder="Número subpremio" maxlength="4" />
+          <button id="setWinners">Publicar ganadores</button>
+        </div>
+        <div id="winners" class="winner-grid"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

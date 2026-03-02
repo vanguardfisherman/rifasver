@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plataforma de Rifas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Plataforma de Rifas</h1>
+    <p>Compra pública</p>
+    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+  </header>
+  <main>
+    <section class="panel wide">
+      <h2>Rifas activas</h2>
+      <select id="raffleSelect"></select>
+      <p id="raffleInfo"></p>
+      <div id="subprizes" class="subprizes"></div>
+      <div class="actions">
+        <button class="quick" data-q="10">10</button>
+        <button class="quick" data-q="20">20</button>
+        <button class="quick" data-q="50">50</button>
+        <input id="search" placeholder="Buscar 0001" maxlength="4" />
+      </div>
+      <div id="grid" class="grid"></div>
+      <p id="selInfo"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Checkout</h2>
+      <form id="checkout">
+        <input name="document" placeholder="Documento" required />
+        <input name="first_name" placeholder="Nombre" required />
+        <input name="last_name" placeholder="Apellido" required />
+        <input type="email" name="email" placeholder="Correo" required />
+        <input name="phone" placeholder="Celular" required />
+        <input name="city" placeholder="Ciudad" />
+        <button type="submit">Pagar simulado</button>
+      </form>
+      <p id="msg"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Consulta tus entradas</h2>
+      <div class="actions"><input id="lookup" placeholder="Correo o documento" /><button id="lookupBtn">Consultar</button></div>
+      <ul id="lookupOut"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Ganadores publicados</h2>
+      <div id="winners" class="winners"></div>
+    </section>
+  </main>
+  <script src="/public.js"></script>
+</body>
+</html>
