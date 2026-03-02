@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
+import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -10,6 +12,18 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "rifas.db"
 STATIC_DIR = ROOT / "static"
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_REQUESTS = 20
+
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+
+ADMIN_TOKENS = {}
+RATE_LIMIT_BY_IP = {}
+
+
+def hash_text(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def db():
@@ -18,12 +32,23 @@ def db():
     return conn
 
 
+def to_dict(row):
+    return {k: row[k] for k in row.keys()}
+
+
 def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = db()
     cur = conn.cursor()
     cur.executescript(
         """
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS raffles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -88,6 +113,13 @@ def init_db():
         """
     )
 
+    existing_admin = cur.execute("SELECT COUNT(*) c FROM admins").fetchone()["c"]
+    if existing_admin == 0:
+        cur.execute(
+            "INSERT INTO admins(username,password_hash,created_at) VALUES(?,?,?)",
+            (ADMIN_USER, hash_text(ADMIN_PASSWORD), datetime.utcnow().isoformat()),
+        )
+
     existing = cur.execute("SELECT COUNT(*) c FROM raffles").fetchone()["c"]
     if existing == 0:
         cur.execute(
@@ -111,8 +143,16 @@ def init_db():
     conn.close()
 
 
-def to_dict(row):
-    return {k: row[k] for k in row.keys()}
+def is_rate_limited(client_ip):
+    now = datetime.utcnow()
+    bucket = RATE_LIMIT_BY_IP.get(client_ip, [])
+    valid = [t for t in bucket if (now - t).total_seconds() <= RATE_LIMIT_WINDOW_SECONDS]
+    RATE_LIMIT_BY_IP[client_ip] = valid
+    if len(valid) >= RATE_LIMIT_MAX_REQUESTS:
+        return True
+    valid.append(now)
+    RATE_LIMIT_BY_IP[client_ip] = valid
+    return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -125,12 +165,28 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _json(self, status=200, payload=None):
-        self._send(status, json.dumps(payload or {}, ensure_ascii=False), "application/json; charset=utf-8")
+        self._send(status, json.dumps(payload if payload is not None else {}, ensure_ascii=False), "application/json; charset=utf-8")
 
     def _read_json(self):
         l = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(l) if l else b"{}"
         return json.loads(raw.decode("utf-8"))
+
+    def _client_ip(self):
+        return self.headers.get("X-Forwarded-For", self.client_address[0]).split(",")[0].strip()
+
+    def _require_admin(self):
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return False
+        token = auth.split(" ", 1)[1].strip()
+        expires_at = ADMIN_TOKENS.get(token)
+        if not expires_at:
+            return False
+        if datetime.utcnow() > expires_at:
+            ADMIN_TOKENS.pop(token, None)
+            return False
+        return True
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -142,9 +198,12 @@ class Handler(BaseHTTPRequestHandler):
         file_path = STATIC_DIR / ("index.html" if path == "/" else path.lstrip("/"))
         if file_path.exists() and file_path.is_file():
             ctype = "text/plain"
-            if file_path.suffix == ".html": ctype = "text/html; charset=utf-8"
-            elif file_path.suffix == ".css": ctype = "text/css"
-            elif file_path.suffix == ".js": ctype = "application/javascript"
+            if file_path.suffix == ".html":
+                ctype = "text/html; charset=utf-8"
+            elif file_path.suffix == ".css":
+                ctype = "text/css"
+            elif file_path.suffix == ".js":
+                ctype = "application/javascript"
             self._send(200, file_path.read_bytes(), ctype)
             return
         self._send(404, "Not found", "text/plain")
@@ -165,6 +224,9 @@ class Handler(BaseHTTPRequestHandler):
         conn = db()
         cur = conn.cursor()
 
+        if path == "/api/health":
+            return self._json(200, {"ok": True})
+
         if path == "/api/raffles":
             rows = [to_dict(r) for r in cur.execute("SELECT * FROM raffles ORDER BY id DESC")]
             return self._json(200, rows)
@@ -175,6 +237,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"sold": sold})
 
         if path == "/api/tickets/query":
+            if is_rate_limited(self._client_ip()):
+                return self._json(429, {"error": "Demasiadas consultas. Intenta nuevamente en 1 minuto."})
             key = (query.get("key", [""])[0]).strip().lower()
             rows = cur.execute(
                 """
@@ -214,29 +278,47 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return self._json(200, winners)
 
-        self._json(404, {"error": "Not found"})
+        if path == "/api/admin/orders":
+            if not self._require_admin():
+                return self._json(401, {"error": "No autorizado"})
+            rows = cur.execute(
+                """
+                SELECT o.id, o.total, o.status, o.created_at, r.title raffle_title,
+                c.first_name, c.last_name, c.email, c.document, GROUP_CONCAT(n.number) numbers
+                FROM orders o
+                JOIN raffles r ON r.id=o.raffle_id
+                JOIN customers c ON c.id=o.customer_id
+                JOIN order_numbers n ON n.order_id=o.id
+                GROUP BY o.id ORDER BY o.id DESC
+                """
+            ).fetchall()
+            return self._json(200, [to_dict(r) for r in rows])
+
+        if path == "/api/admin/audit-logs":
+            if not self._require_admin():
+                return self._json(401, {"error": "No autorizado"})
+            rows = cur.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 50").fetchall()
+            return self._json(200, [to_dict(r) for r in rows])
+
+        return self._json(404, {"error": "Not found"})
 
     def api_post(self, path):
         conn = db()
         cur = conn.cursor()
         data = self._read_json()
 
-        if path == "/api/admin/raffles":
-            now = datetime.utcnow().isoformat()
-            cur.execute(
-                """
-                INSERT INTO raffles(title,description,total_numbers,ticket_price,min_purchase,status,main_prize,image_url,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    data["title"], data.get("description", ""), int(data["total_numbers"]), int(data["ticket_price"]),
-                    int(data.get("min_purchase", 1)), data.get("status", "active"), data.get("main_prize", ""), data.get("image_url", ""), now
-                )
-            )
-            rid = cur.lastrowid
-            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (rid, "create_raffle", json.dumps(data), now))
-            conn.commit()
-            return self._json(201, {"id": rid})
+        if path == "/api/admin/login":
+            username = data.get("username", "")
+            password = data.get("password", "")
+            admin = cur.execute(
+                "SELECT * FROM admins WHERE username=? AND password_hash=?",
+                (username, hash_text(password)),
+            ).fetchone()
+            if not admin:
+                return self._json(401, {"error": "Credenciales inválidas"})
+            token = secrets.token_urlsafe(24)
+            ADMIN_TOKENS[token] = datetime.utcnow() + timedelta(hours=8)
+            return self._json(200, {"token": token, "username": username})
 
         if path == "/api/orders":
             raffle_id = int(data["raffle_id"])
@@ -255,9 +337,10 @@ class Handler(BaseHTTPRequestHandler):
             if conflicts:
                 return self._json(409, {"error": "Números no disponibles", "numbers": conflicts})
 
+            customer_data = data["customer"]
             c = cur.execute(
                 "SELECT id FROM customers WHERE document=? AND email=?",
-                (data["customer"]["document"], data["customer"]["email"]),
+                (customer_data["document"], customer_data["email"]),
             ).fetchone()
             if c:
                 customer_id = c["id"]
@@ -265,19 +348,45 @@ class Handler(BaseHTTPRequestHandler):
                 cur.execute(
                     "INSERT INTO customers(document,first_name,last_name,email,phone,city) VALUES(?,?,?,?,?,?)",
                     (
-                        data["customer"]["document"], data["customer"]["first_name"], data["customer"]["last_name"],
-                        data["customer"]["email"], data["customer"]["phone"], data["customer"].get("city", "")
+                        customer_data["document"], customer_data["first_name"], customer_data["last_name"],
+                        customer_data["email"], customer_data["phone"], customer_data.get("city", "")
                     ),
                 )
                 customer_id = cur.lastrowid
 
             total = len(numbers) * raffle["ticket_price"]
             now = datetime.utcnow().isoformat()
-            cur.execute("INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)", (raffle_id, customer_id, total, "paid_simulated", now))
+            cur.execute(
+                "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                (raffle_id, customer_id, total, "paid_simulated", now),
+            )
             order_id = cur.lastrowid
-            cur.executemany("INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)", [(order_id, raffle_id, n) for n in numbers])
+            cur.executemany(
+                "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                [(order_id, raffle_id, n) for n in numbers],
+            )
             conn.commit()
             return self._json(201, {"order_id": order_id, "total": total, "numbers": numbers})
+
+        if path.startswith("/api/admin/") and path != "/api/admin/login" and not self._require_admin():
+            return self._json(401, {"error": "No autorizado"})
+
+        if path == "/api/admin/raffles":
+            now = datetime.utcnow().isoformat()
+            cur.execute(
+                """
+                INSERT INTO raffles(title,description,total_numbers,ticket_price,min_purchase,status,main_prize,image_url,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    data["title"], data.get("description", ""), int(data["total_numbers"]), int(data["ticket_price"]),
+                    int(data.get("min_purchase", 1)), data.get("status", "active"), data.get("main_prize", ""), data.get("image_url", ""), now
+                )
+            )
+            rid = cur.lastrowid
+            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (rid, "create_raffle", json.dumps(data), now))
+            conn.commit()
+            return self._json(201, {"id": rid})
 
         if path.startswith("/api/admin/raffles/") and path.endswith("/draw-results"):
             raffle_id = int(path.split("/")[4])
@@ -294,12 +403,16 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
             return self._json(200, {"ok": True})
 
-        self._json(404, {"error": "Not found"})
+        return self._json(404, {"error": "Not found"})
 
     def api_patch(self, path):
+        if path.startswith("/api/admin/") and not self._require_admin():
+            return self._json(401, {"error": "No autorizado"})
+
         conn = db()
         cur = conn.cursor()
         data = self._read_json()
+
         if path.startswith("/api/admin/raffles/"):
             raffle_id = int(path.split("/")[4])
             allowed = ["title", "description", "total_numbers", "ticket_price", "min_purchase", "main_prize", "image_url", "status"]
@@ -308,6 +421,8 @@ class Handler(BaseHTTPRequestHandler):
                 if k in data:
                     sets.append(f"{k}=?")
                     vals.append(data[k])
+            if not sets:
+                return self._json(400, {"error": "Sin cambios"})
             sets.append("updated_at=?")
             vals.append(datetime.utcnow().isoformat())
             vals.append(raffle_id)
@@ -315,11 +430,13 @@ class Handler(BaseHTTPRequestHandler):
             cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (raffle_id, "update_raffle", json.dumps(data), datetime.utcnow().isoformat()))
             conn.commit()
             return self._json(200, {"ok": True})
-        self._json(404, {"error": "Not found"})
+
+        return self._json(404, {"error": "Not found"})
 
 
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", "8080"))
     print(f"Servidor en http://localhost:{port}")
+    print(f"Admin por defecto => usuario: {ADMIN_USER} | clave: {ADMIN_PASSWORD}")
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

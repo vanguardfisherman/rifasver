@@ -45,21 +45,40 @@
 
     <section class="panel">
       <h2>Admin</h2>
-      <h3>Crear rifa</h3>
-      <form id="createRaffle">
-        <input name="title" placeholder="Título" required />
-        <input name="main_prize" placeholder="Premio principal" required />
-        <input name="total_numbers" type="number" placeholder="Total números" required />
-        <input name="ticket_price" type="number" placeholder="Precio" required />
-        <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
-        <button type="submit">Crear</button>
+      <form id="adminLogin">
+        <input name="username" placeholder="Usuario admin" required />
+        <input type="password" name="password" placeholder="Clave" required />
+        <button type="submit">Ingresar</button>
       </form>
-      <h3>Ganadores</h3>
-      <form id="winnersForm">
-        <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
-        <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
-        <button type="submit">Publicar</button>
-      </form>
+      <p id="adminMsg"></p>
+
+      <div id="adminArea" class="hidden">
+        <h3>Crear rifa</h3>
+        <form id="createRaffle">
+          <input name="title" placeholder="Título" required />
+          <input name="main_prize" placeholder="Premio principal" required />
+          <input name="total_numbers" type="number" placeholder="Total números" required />
+          <input name="ticket_price" type="number" placeholder="Precio" required />
+          <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
+          <button type="submit">Crear</button>
+        </form>
+
+        <h3>Ganadores</h3>
+        <form id="winnersForm">
+          <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
+          <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
+          <button type="submit">Publicar</button>
+        </form>
+
+        <h3>Órdenes (admin)</h3>
+        <button id="loadOrders">Cargar órdenes</button>
+        <ul id="ordersOut"></ul>
+
+        <h3>Auditoría reciente</h3>
+        <button id="loadAudit">Cargar auditoría</button>
+        <ul id="auditOut"></ul>
+      </div>
+
       <div id="winners" class="winners"></div>
     </section>
   </main>
