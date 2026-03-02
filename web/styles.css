@@ -1,0 +1,19 @@
+:root { --bg:#05070d; --card:#0d111c; --blue:#0f5bd8; --text:#f1f3f6; --muted:#9aa3b2; --sold:#3b3f4a; --selected:#1f8b4c; }
+*{box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
+body{margin:0;background:var(--bg);color:var(--text)}
+.header{padding:20px;text-align:center;border-bottom:1px solid #1c2333}
+.subtitle{color:var(--muted)}
+.container{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.card{background:var(--card);padding:16px;border-radius:12px;border:1px solid #1f2a40}
+.quick-actions,.tools{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+button{background:var(--blue);color:white;border:none;padding:10px 12px;border-radius:8px;cursor:pointer}
+input{background:#060a14;color:#fff;border:1px solid #283449;padding:10px;border-radius:8px}
+.number-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;max-height:330px;overflow:auto;padding-right:4px}
+.num{padding:8px 4px;font-size:12px}
+.num.sold{background:var(--sold);cursor:not-allowed}
+.num.selected{background:var(--selected)}
+.muted{color:var(--muted)}
+.form .row{display:grid;gap:6px;margin-bottom:10px}
+.winner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:10px}
+.winner-card{background:#08111f;border:1px solid #1f2a40;border-radius:10px;padding:10px}
+@media (max-width:680px){.number-grid{grid-template-columns:repeat(5,minmax(0,1fr));max-height:260px}}
