@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plataforma de Rifas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <h1>🎟️ Plataforma de Rifas</h1>
+      <p>Compra pública</p>
+    </div>
+    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+  </header>
+
+  <main>
+    <section class="panel wide spotlight product-layout">
+      <div class="product-left">
+        <h2 id="raffleTitle">Rifas activas</h2>
+        <select id="raffleSelect"></select>
+        <p id="raffleInfo"></p>
+        <div id="subprizes" class="subprizes"></div>
+
+        <div class="image-wrap">
+          <img id="raffleImage" alt="Premio de la rifa" />
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <small id="progressText"></small>
+        </div>
+      </div>
+
+      <div class="product-right">
+        <h3>Elige tu pack</h3>
+        <div class="pack-grid">
+          <button class="pack" data-q="2"><span>2 TIQUETES</span><b id="pack2">$0</b><em>Comprar</em></button>
+          <button class="pack popular" data-q="5"><span>5 TIQUETES</span><b id="pack5">$0</b><em>Comprar</em><label>Popular</label></button>
+          <button class="pack" data-q="10"><span>10 TIQUETES</span><b id="pack10">$0</b><em>Comprar</em></button>
+          <button class="pack" data-q="100"><span>100 TIQUETES</span><b id="pack100">$0</b><em>Comprar</em></button>
+        </div>
+
+        <div class="actions">
+          <input id="search" placeholder="Buscar número (0001)" maxlength="4" />
+          <input id="jumpTo" placeholder="Ir a número" maxlength="4" />
+          <button id="jumpBtn" type="button">Ir</button>
+          <input id="rangeFrom" placeholder="Desde" maxlength="4" />
+          <input id="rangeTo" placeholder="Hasta" maxlength="4" />
+          <button id="rangeBtn" type="button">Rango</button>
+          <button id="random10" type="button">Aleatorio x10</button>
+        </div>
+
+        <div class="grid-toolbar">
+          <button id="prevPage" type="button">←</button>
+          <span id="pageInfo"></span>
+          <button id="nextPage" type="button">→</button>
+        </div>
+
+        <div id="grid" class="grid"></div>
+        <p id="selInfo"></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Checkout</h2>
+      <form id="checkout">
+        <input name="document" placeholder="Documento" required />
+        <input name="first_name" placeholder="Nombre" required />
+        <input name="last_name" placeholder="Apellido" required />
+        <input type="email" name="email" placeholder="Correo" required />
+        <input name="phone" placeholder="Celular" required />
+        <input name="city" placeholder="Ciudad" />
+        <button type="submit">Pagar simulado</button>
+      </form>
+      <p id="msg"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Consulta tus entradas</h2>
+      <div class="actions"><input id="lookup" placeholder="Correo o documento" /><button id="lookupBtn">Consultar</button></div>
+      <ul id="lookupOut"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Ganadores publicados</h2>
+      <div id="winners" class="winners"></div>
+    </section>
+  </main>
+
+  <div class="sticky-cart" id="stickyCart">
+    <span id="stickyInfo">0 seleccionados</span>
+    <button id="stickyCheckout">Ir a checkout</button>
+  </div>
+
+  <script src="/public.js"></script>
+</body>
+</html>
