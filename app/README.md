@@ -25,3 +25,5 @@ Abrir:
 - Comprobante PDF server-side por orden (`GET /api/orders/:id/receipt?document=...`).
 - Frontend público separado de panel admin.
 - Seguridad base: protección de endpoints admin por token y rate limit para consulta de entradas.
+
+- Render optimizado de grilla pública con paginación (mejor rendimiento para rifas grandes, ej. 10.000 números).
