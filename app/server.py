@@ -62,7 +62,7 @@ def init_db():
             updated_at TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS raffle_subprizes (
+          CREATE TABLE IF NOT EXISTS raffle_subprizes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             raffle_id INTEGER NOT NULL,
             name TEXT NOT NULL,
