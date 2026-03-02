@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Rifas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Panel Admin</h1>
+    <p>Gestión de rifas</p>
+    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Acceso admin</h2>
+      <form id="adminLogin">
+        <input name="username" placeholder="Usuario admin" required />
+        <input type="password" name="password" placeholder="Clave" required />
+        <button type="submit">Ingresar</button>
+      </form>
+      <p id="adminMsg"></p>
+    </section>
+
+    <section id="adminArea" class="panel hidden">
+      <h2>Rifa activa</h2>
+      <select id="raffleSelect"></select>
+
+      <h3>Editar rifa</h3>
+      <form id="editRaffle">
+        <input name="title" placeholder="Título" required />
+        <input name="main_prize" placeholder="Premio principal" required />
+        <input name="total_numbers" type="number" placeholder="Total números" required />
+        <input name="ticket_price" type="number" placeholder="Precio" required />
+        <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
+        <select name="status">
+          <option value="active">Activa</option>
+          <option value="closed">Cerrada</option>
+        </select>
+        <button type="submit">Guardar cambios</button>
+      </form>
+
+      <h3>Subpremios</h3>
+      <form id="subprizesForm">
+        <textarea id="subprizesInput" rows="5" placeholder="Uno por línea: Nombre|Descripción"></textarea>
+        <button type="submit">Guardar subpremios</button>
+      </form>
+
+      <h3>Ganadores</h3>
+      <form id="winnersForm">
+        <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
+        <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
+        <button type="submit">Publicar</button>
+      </form>
+
+      <h3>Órdenes</h3>
+      <button id="loadOrders">Cargar órdenes</button>
+      <ul id="ordersOut"></ul>
+
+      <h3>Auditoría</h3>
+      <button id="loadAudit">Cargar auditoría</button>
+      <ul id="auditOut"></ul>
+    </section>
+  </main>
+  <script src="/admin.js"></script>
+</body>
+</html>

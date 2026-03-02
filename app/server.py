@@ -22,7 +22,7 @@ ADMIN_TOKENS = {}
 RATE_LIMIT_BY_IP = {}
 
 
-def hash_text(text):
+def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -60,6 +60,16 @@ def init_db():
             main_prize TEXT NOT NULL,
             image_url TEXT,
             updated_at TEXT NOT NULL
+        );
+
+          CREATE TABLE IF NOT EXISTS raffle_subprizes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raffle_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            winner_rule TEXT DEFAULT 'editable_by_admin',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(raffle_id) REFERENCES raffles(id)
         );
 
         CREATE TABLE IF NOT EXISTS customers (
@@ -113,15 +123,14 @@ def init_db():
         """
     )
 
-    existing_admin = cur.execute("SELECT COUNT(*) c FROM admins").fetchone()["c"]
-    if existing_admin == 0:
+    if cur.execute("SELECT COUNT(*) c FROM admins").fetchone()["c"] == 0:
         cur.execute(
             "INSERT INTO admins(username,password_hash,created_at) VALUES(?,?,?)",
             (ADMIN_USER, hash_text(ADMIN_PASSWORD), datetime.utcnow().isoformat()),
         )
 
-    existing = cur.execute("SELECT COUNT(*) c FROM raffles").fetchone()["c"]
-    if existing == 0:
+    if cur.execute("SELECT COUNT(*) c FROM raffles").fetchone()["c"] == 0:
+        now = datetime.utcnow().isoformat()
         cur.execute(
             """
             INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, status, main_prize, image_url, updated_at)
@@ -136,14 +145,23 @@ def init_db():
                 "active",
                 "$4.000.000 COP",
                 "",
-                datetime.utcnow().isoformat(),
+                now,
             ),
         )
+        raffle_id = cur.lastrowid
+        cur.executemany(
+            "INSERT INTO raffle_subprizes(raffle_id,name,description,winner_rule,created_at) VALUES(?,?,?,?,?)",
+            [
+                (raffle_id, "Subpremio 1", "$250.000", "editable_by_admin", now),
+                (raffle_id, "Subpremio 2", "$250.000", "editable_by_admin", now),
+            ],
+        )
+
     conn.commit()
     conn.close()
 
 
-def is_rate_limited(client_ip):
+def is_rate_limited(client_ip: str) -> bool:
     now = datetime.utcnow()
     bucket = RATE_LIMIT_BY_IP.get(client_ip, [])
     valid = [t for t in bucket if (now - t).total_seconds() <= RATE_LIMIT_WINDOW_SECONDS]
@@ -168,8 +186,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(payload if payload is not None else {}, ensure_ascii=False), "application/json; charset=utf-8")
 
     def _read_json(self):
-        l = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(l) if l else b"{}"
+        length = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw.decode("utf-8"))
 
     def _client_ip(self):
@@ -194,6 +212,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/"):
             return self.api_get(path, parse_qs(parsed.query))
+
+        if path == "/admin":
+            path = "/admin.html"
 
         file_path = STATIC_DIR / ("index.html" if path == "/" else path.lstrip("/"))
         if file_path.exists() and file_path.is_file():
@@ -236,6 +257,11 @@ class Handler(BaseHTTPRequestHandler):
             sold = [r["number"] for r in cur.execute("SELECT number FROM order_numbers WHERE raffle_id = ?", (raffle_id,))]
             return self._json(200, {"sold": sold})
 
+        if path.startswith("/api/raffles/") and path.endswith("/subprizes"):
+            raffle_id = int(path.split("/")[3])
+            rows = [to_dict(r) for r in cur.execute("SELECT * FROM raffle_subprizes WHERE raffle_id=? ORDER BY id", (raffle_id,))]
+            return self._json(200, rows)
+
         if path == "/api/tickets/query":
             if is_rate_limited(self._client_ip()):
                 return self._json(429, {"error": "Demasiadas consultas. Intenta nuevamente en 1 minuto."})
@@ -256,9 +282,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/raffles/") and path.endswith("/winners"):
             raffle_id = int(path.split("/")[3])
-            rows = cur.execute(
-                "SELECT * FROM draw_results WHERE raffle_id=? ORDER BY id", (raffle_id,)
-            ).fetchall()
+            rows = cur.execute("SELECT * FROM draw_results WHERE raffle_id=? ORDER BY id", (raffle_id,)).fetchall()
             winners = []
             for r in rows:
                 owner = cur.execute(
@@ -387,6 +411,20 @@ class Handler(BaseHTTPRequestHandler):
             cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (rid, "create_raffle", json.dumps(data), now))
             conn.commit()
             return self._json(201, {"id": rid})
+
+        if path.startswith("/api/admin/raffles/") and path.endswith("/subprizes"):
+            raffle_id = int(path.split("/")[4])
+            subprizes = data.get("subprizes", [])
+            now = datetime.utcnow().isoformat()
+            cur.execute("DELETE FROM raffle_subprizes WHERE raffle_id=?", (raffle_id,))
+            for item in subprizes:
+                cur.execute(
+                    "INSERT INTO raffle_subprizes(raffle_id,name,description,winner_rule,created_at) VALUES(?,?,?,?,?)",
+                    (raffle_id, item.get("name", "Subpremio"), item.get("description", ""), item.get("winner_rule", "editable_by_admin"), now),
+                )
+            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (raffle_id, "set_subprizes", json.dumps(data), now))
+            conn.commit()
+            return self._json(200, {"ok": True})
 
         if path.startswith("/api/admin/raffles/") and path.endswith("/draw-results"):
             raffle_id = int(path.split("/")[4])

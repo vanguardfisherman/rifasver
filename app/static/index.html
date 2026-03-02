@@ -7,12 +7,17 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header><h1>Plataforma de Rifas</h1><p>Versión principal (pago simulado)</p></header>
+  <header>
+    <h1>Plataforma de Rifas</h1>
+    <p>Compra pública</p>
+    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+  </header>
   <main>
-    <section class="panel">
+    <section class="panel wide">
       <h2>Rifas activas</h2>
       <select id="raffleSelect"></select>
       <p id="raffleInfo"></p>
+      <div id="subprizes" class="subprizes"></div>
       <div class="actions">
         <button class="quick" data-q="10">10</button>
         <button class="quick" data-q="20">20</button>
@@ -44,44 +49,10 @@
     </section>
 
     <section class="panel">
-      <h2>Admin</h2>
-      <form id="adminLogin">
-        <input name="username" placeholder="Usuario admin" required />
-        <input type="password" name="password" placeholder="Clave" required />
-        <button type="submit">Ingresar</button>
-      </form>
-      <p id="adminMsg"></p>
-
-      <div id="adminArea" class="hidden">
-        <h3>Crear rifa</h3>
-        <form id="createRaffle">
-          <input name="title" placeholder="Título" required />
-          <input name="main_prize" placeholder="Premio principal" required />
-          <input name="total_numbers" type="number" placeholder="Total números" required />
-          <input name="ticket_price" type="number" placeholder="Precio" required />
-          <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
-          <button type="submit">Crear</button>
-        </form>
-
-        <h3>Ganadores</h3>
-        <form id="winnersForm">
-          <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
-          <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
-          <button type="submit">Publicar</button>
-        </form>
-
-        <h3>Órdenes (admin)</h3>
-        <button id="loadOrders">Cargar órdenes</button>
-        <ul id="ordersOut"></ul>
-
-        <h3>Auditoría reciente</h3>
-        <button id="loadAudit">Cargar auditoría</button>
-        <ul id="auditOut"></ul>
-      </div>
-
+      <h2>Ganadores publicados</h2>
       <div id="winners" class="winners"></div>
     </section>
   </main>
-  <script src="/app.js"></script>
+  <script src="/public.js"></script>
 </body>
 </html>
