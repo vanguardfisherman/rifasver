@@ -53,14 +53,26 @@ function renderGrid() {
   $('#selInfo').textContent = `Seleccionados: ${selected.size} • Total: $${(selected.size * Number(currentRaffle.ticket_price)).toLocaleString('es-CO')}`;
 }
 
+async function downloadReceipt(orderId, document) {
+  const res = await fetch(`/api/orders/${orderId}/receipt?document=${encodeURIComponent(document)}`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || 'No se pudo generar el comprobante');
+  }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `orden-${orderId}.pdf`;
+  a.click();
+}
+
 async function buy(e) {
   e.preventDefault();
   try {
     const customer = Object.fromEntries(new FormData(e.target).entries());
     const out = await api('/api/orders', {method:'POST', body: JSON.stringify({raffle_id: currentRaffle.id, numbers:[...selected], customer})});
-    $('#msg').textContent = `Compra exitosa. Orden #${out.order_id}`;
-    const blob = new Blob([`COMPROBANTE PLACEHOLDER\nOrden: ${out.order_id}\nNúmeros: ${out.numbers.join(', ')}`], {type:'application/pdf'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `orden-${out.order_id}.pdf`; a.click();
+    await downloadReceipt(out.order_id, customer.document);
+    $('#msg').textContent = `Compra exitosa. Orden #${out.order_id}. Comprobante descargado.`;
     await onRaffleChange();
     e.target.reset();
   } catch (err) {

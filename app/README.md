@@ -22,5 +22,6 @@ Abrir:
 ## Qué incluye
 - Backend real con SQLite (rifas, subpremios, clientes, órdenes, números, resultados, auditoría).
 - API REST para compra, consulta, admin (login, crear/editar rifa, subpremios, publicar ganadores).
+- Comprobante PDF server-side por orden (`GET /api/orders/:id/receipt?document=...`).
 - Frontend público separado de panel admin.
 - Seguridad base: protección de endpoints admin por token y rate limit para consulta de entradas.

@@ -26,6 +26,25 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+
+
+def build_pdf_receipt(lines):
+    safe_lines = [line.replace('(', '').replace(')', '') for line in lines]
+    text = "\n".join(safe_lines)
+    stream = f"BT /F1 12 Tf 50 760 Td ({text}) Tj ET"
+    pdf = (
+        "%PDF-1.4\n"
+        "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n"
+        "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n"
+        "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n"
+        "4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"
+        f"5 0 obj<< /Length {len(stream)} >>stream\n{stream}\nendstream endobj\n"
+        "xref\n0 6\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n0000000243 00000 n \n0000000313 00000 n \n"
+        "trailer<< /Size 6 /Root 1 0 R >>\n"
+        f"startxref\n{350 + len(stream)}\n%%EOF"
+    )
+    return pdf.encode('latin-1', errors='ignore')
+
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -62,7 +81,7 @@ def init_db():
             updated_at TEXT NOT NULL
         );
 
-          CREATE TABLE IF NOT EXISTS raffle_subprizes (
+        CREATE TABLE IF NOT EXISTS raffle_subprizes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             raffle_id INTEGER NOT NULL,
             name TEXT NOT NULL,
@@ -301,6 +320,37 @@ class Handler(BaseHTTPRequestHandler):
                     "owner": f"{owner['first_name'][0]}*** {owner['last_name'][0]}*** • {owner['city'] or 'N/D'}" if owner else "Sin asignar",
                 })
             return self._json(200, winners)
+
+        if path.startswith("/api/orders/") and path.endswith("/receipt"):
+            order_id = int(path.split("/")[3])
+            document = (query.get("document", [""])[0]).strip()
+            row = cur.execute(
+                """
+                SELECT o.id, o.total, o.created_at, c.document, c.first_name, c.last_name, r.title,
+                GROUP_CONCAT(n.number) numbers
+                FROM orders o
+                JOIN customers c ON c.id=o.customer_id
+                JOIN raffles r ON r.id=o.raffle_id
+                JOIN order_numbers n ON n.order_id=o.id
+                WHERE o.id=?
+                GROUP BY o.id
+                """,
+                (order_id,),
+            ).fetchone()
+            if not row:
+                return self._json(404, {"error": "Orden no encontrada"})
+            if document != row["document"]:
+                return self._json(403, {"error": "Documento inválido para descargar comprobante"})
+            pdf_bytes = build_pdf_receipt([
+                "COMPROBANTE RIFA",
+                f"Orden: {row['id']}",
+                f"Fecha: {row['created_at']}",
+                f"Cliente: {row['first_name']} {row['last_name']}",
+                f"Rifa: {row['title']}",
+                f"Numeros: {row['numbers']}",
+                f"Total: {row['total']}",
+            ])
+            return self._send(200, pdf_bytes, "application/pdf")
 
         if path == "/api/admin/orders":
             if not self._require_admin():
