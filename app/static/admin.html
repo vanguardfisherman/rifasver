@@ -3,66 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Rifas</title>
+  <meta name="theme-color" content="#060a13" />
+  <title>Admin - Plataforma de Rifas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header>
-    <h1>Panel Admin</h1>
-    <p>Gestión de rifas</p>
-    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+    <h1>Panel de Administracion</h1>
+    <p>Gestion de rifas y ordenes</p>
+    <nav>
+      <a href="/">Inicio</a>
+      <a href="/admin">Admin</a>
+    </nav>
   </header>
+
   <main>
+    <!-- LOGIN -->
     <section class="panel">
-      <h2>Acceso admin</h2>
-      <form id="adminLogin">
-        <input name="username" placeholder="Usuario admin" required />
-        <input type="password" name="password" placeholder="Clave" required />
+      <h2>Acceso administrador</h2>
+      <form id="adminLogin" autocomplete="on">
+        <input name="username" placeholder="Usuario" required aria-label="Usuario administrador" autocomplete="username" />
+        <input type="password" name="password" placeholder="Contrasena" required aria-label="Contrasena" autocomplete="current-password" />
         <button type="submit">Ingresar</button>
       </form>
       <p id="adminMsg"></p>
     </section>
 
+    <!-- ADMIN AREA -->
     <section id="adminArea" class="panel hidden">
       <h2>Rifa activa</h2>
-      <select id="raffleSelect"></select>
+      <select id="raffleSelect" aria-label="Seleccionar rifa"></select>
 
-      <h3>Editar rifa</h3>
+      <h3 style="margin-top:20px">Editar rifa</h3>
       <form id="editRaffle">
-        <input name="title" placeholder="Título" required />
-        <input name="main_prize" placeholder="Premio principal" required />
-        <input name="total_numbers" type="number" placeholder="Total números" required />
-        <input name="ticket_price" type="number" placeholder="Precio" required />
-        <input name="min_purchase" type="number" placeholder="Mínimo compra" required />
-        <select name="status">
+        <input name="title" placeholder="Titulo" required aria-label="Titulo de la rifa" />
+        <input name="main_prize" placeholder="Premio principal" required aria-label="Premio principal" />
+        <input name="total_numbers" type="number" placeholder="Total numeros" required aria-label="Total numeros" />
+        <input name="ticket_price" type="number" placeholder="Precio por numero" required aria-label="Precio" />
+        <input name="min_purchase" type="number" placeholder="Minimo compra" required aria-label="Minimo compra" />
+        <select name="status" aria-label="Estado de la rifa">
           <option value="active">Activa</option>
           <option value="closed">Cerrada</option>
         </select>
         <button type="submit">Guardar cambios</button>
       </form>
 
-      <h3>Subpremios</h3>
+      <h3 style="margin-top:20px">Subpremios</h3>
       <form id="subprizesForm">
-        <textarea id="subprizesInput" rows="5" placeholder="Uno por línea: Nombre|Descripción"></textarea>
+        <textarea id="subprizesInput" rows="5" placeholder="Uno por linea: Nombre|Descripcion" aria-label="Subpremios"></textarea>
         <button type="submit">Guardar subpremios</button>
       </form>
 
-      <h3>Ganadores</h3>
+      <h3 style="margin-top:20px">Ganadores</h3>
       <form id="winnersForm">
-        <input name="main" placeholder="Ganador principal 0001" maxlength="4" />
-        <input name="sub" placeholder="Subpremio 0001" maxlength="4" />
-        <button type="submit">Publicar</button>
+        <input name="main" placeholder="Ganador principal (0001)" maxlength="4" aria-label="Numero ganador principal" />
+        <input name="sub" placeholder="Subpremio (0001)" maxlength="4" aria-label="Numero subpremio" />
+        <button type="submit">Publicar ganadores</button>
       </form>
 
-      <h3>Órdenes</h3>
-      <button id="loadOrders">Cargar órdenes</button>
-      <ul id="ordersOut"></ul>
+      <h3 style="margin-top:20px">Ordenes</h3>
+      <button id="loadOrders" type="button">Cargar ordenes</button>
+      <ul id="ordersOut" role="list"></ul>
 
-      <h3>Auditoría</h3>
-      <button id="loadAudit">Cargar auditoría</button>
-      <ul id="auditOut"></ul>
+      <h3 style="margin-top:20px">Auditoria</h3>
+      <button id="loadAudit" type="button">Cargar auditoria</button>
+      <ul id="auditOut" role="list"></ul>
     </section>
   </main>
+
   <script src="/admin.js"></script>
 </body>
 </html>

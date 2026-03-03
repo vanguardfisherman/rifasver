@@ -3,32 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Plataforma de rifas en linea. Compra tus numeros y gana increibles premios." />
+  <meta name="theme-color" content="#060a13" />
   <title>Plataforma de Rifas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="hero">
     <div>
-      <h1>🎟️ Plataforma de Rifas</h1>
-      <p>Compra pública</p>
+      <h1>Plataforma de Rifas</h1>
+      <p>Compra tus numeros y gana</p>
     </div>
-    <nav><a href="/">Inicio</a> · <a href="/admin">Admin</a></nav>
+    <nav>
+      <a href="/">Inicio</a>
+      <a href="/admin">Admin</a>
+    </nav>
   </header>
 
   <main>
+    <!-- PRODUCT SPOTLIGHT -->
     <section class="panel wide spotlight product-layout">
       <div class="product-left">
-        <h2 id="raffleTitle">Rifas activas</h2>
-        <select id="raffleSelect"></select>
+        <div>
+          <h2 id="raffleTitle">Rifas activas</h2>
+          <select id="raffleSelect" aria-label="Seleccionar rifa"></select>
+        </div>
         <p id="raffleInfo"></p>
-        <div id="subprizes" class="subprizes"></div>
+        <div id="subprizes" class="subprizes" aria-label="Subpremios"></div>
 
         <div class="image-wrap">
-          <img id="raffleImage" alt="Premio de la rifa" />
+          <img id="raffleImage" alt="Premio de la rifa" loading="lazy" />
         </div>
 
         <div class="progress-wrap">
-          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <div class="progress-track">
+            <div id="progressBar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
           <small id="progressText"></small>
         </div>
       </div>
@@ -36,62 +49,88 @@
       <div class="product-right">
         <h3>Elige tu pack</h3>
         <div class="pack-grid">
-          <button class="pack" data-q="2"><span>2 TIQUETES</span><b id="pack2">$0</b><em>Comprar</em></button>
-          <button class="pack popular" data-q="5"><span>5 TIQUETES</span><b id="pack5">$0</b><em>Comprar</em><label>Popular</label></button>
-          <button class="pack" data-q="10"><span>10 TIQUETES</span><b id="pack10">$0</b><em>Comprar</em></button>
-          <button class="pack" data-q="100"><span>100 TIQUETES</span><b id="pack100">$0</b><em>Comprar</em></button>
+          <button class="pack" data-q="2" type="button">
+            <span>2 Tiquetes</span>
+            <b id="pack2">$0</b>
+            <em>Comprar</em>
+          </button>
+          <button class="pack popular" data-q="5" type="button">
+            <span>5 Tiquetes</span>
+            <b id="pack5">$0</b>
+            <em>Comprar</em>
+            <label>Popular</label>
+          </button>
+          <button class="pack" data-q="10" type="button">
+            <span>10 Tiquetes</span>
+            <b id="pack10">$0</b>
+            <em>Comprar</em>
+          </button>
+          <button class="pack" data-q="100" type="button">
+            <span>100 Tiquetes</span>
+            <b id="pack100">$0</b>
+            <em>Comprar</em>
+          </button>
         </div>
 
         <div class="actions">
-          <input id="search" placeholder="Buscar número (0001)" maxlength="4" />
-          <input id="jumpTo" placeholder="Ir a número" maxlength="4" />
+          <input id="search" placeholder="Buscar numero (0001)" maxlength="4" aria-label="Buscar numero" />
+          <input id="jumpTo" placeholder="Ir a numero" maxlength="4" aria-label="Ir a numero" />
           <button id="jumpBtn" type="button">Ir</button>
-          <input id="rangeFrom" placeholder="Desde" maxlength="4" />
-          <input id="rangeTo" placeholder="Hasta" maxlength="4" />
+        </div>
+        <div class="actions">
+          <input id="rangeFrom" placeholder="Desde" maxlength="4" aria-label="Rango desde" />
+          <input id="rangeTo" placeholder="Hasta" maxlength="4" aria-label="Rango hasta" />
           <button id="rangeBtn" type="button">Rango</button>
           <button id="random10" type="button">Aleatorio x10</button>
         </div>
 
         <div class="grid-toolbar">
-          <button id="prevPage" type="button">←</button>
+          <button id="prevPage" type="button" aria-label="Pagina anterior">&#8592;</button>
           <span id="pageInfo"></span>
-          <button id="nextPage" type="button">→</button>
+          <button id="nextPage" type="button" aria-label="Pagina siguiente">&#8594;</button>
         </div>
 
-        <div id="grid" class="grid"></div>
+        <div id="grid" class="grid" role="grid" aria-label="Seleccionar numeros"></div>
         <p id="selInfo"></p>
       </div>
     </section>
 
+    <!-- CHECKOUT -->
     <section class="panel">
       <h2>Checkout</h2>
-      <form id="checkout">
-        <input name="document" placeholder="Documento" required />
-        <input name="first_name" placeholder="Nombre" required />
-        <input name="last_name" placeholder="Apellido" required />
-        <input type="email" name="email" placeholder="Correo" required />
-        <input name="phone" placeholder="Celular" required />
-        <input name="city" placeholder="Ciudad" />
-        <button type="submit">Pagar simulado</button>
+      <form id="checkout" autocomplete="on">
+        <input name="document" placeholder="Documento" required aria-label="Documento" />
+        <input name="first_name" placeholder="Nombre" required aria-label="Nombre" autocomplete="given-name" />
+        <input name="last_name" placeholder="Apellido" required aria-label="Apellido" autocomplete="family-name" />
+        <input type="email" name="email" placeholder="Correo electronico" required aria-label="Correo" autocomplete="email" />
+        <input name="phone" placeholder="Celular" required aria-label="Celular" autocomplete="tel" />
+        <input name="city" placeholder="Ciudad" aria-label="Ciudad" />
+        <button type="submit">Pagar</button>
       </form>
       <p id="msg"></p>
     </section>
 
+    <!-- LOOKUP -->
     <section class="panel">
       <h2>Consulta tus entradas</h2>
-      <div class="actions"><input id="lookup" placeholder="Correo o documento" /><button id="lookupBtn">Consultar</button></div>
-      <ul id="lookupOut"></ul>
+      <div class="actions">
+        <input id="lookup" placeholder="Correo o documento" aria-label="Consultar entradas" />
+        <button id="lookupBtn" type="button">Consultar</button>
+      </div>
+      <ul id="lookupOut" role="list"></ul>
     </section>
 
+    <!-- WINNERS -->
     <section class="panel">
       <h2>Ganadores publicados</h2>
-      <div id="winners" class="winners"></div>
+      <div id="winners" class="winners" role="list"></div>
     </section>
   </main>
 
-  <div class="sticky-cart" id="stickyCart">
+  <!-- STICKY CART -->
+  <div class="sticky-cart" id="stickyCart" role="status" aria-live="polite">
     <span id="stickyInfo">0 seleccionados</span>
-    <button id="stickyCheckout">Ir a checkout</button>
+    <button id="stickyCheckout" type="button">Ir a checkout</button>
   </div>
 
   <script src="/public.js"></script>
