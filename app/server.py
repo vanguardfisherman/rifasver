@@ -318,12 +318,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, "Not found", "text/plain")
 
     def api_get(self, path, query):
+        if path == "/api/health":
+            return self._json(200, {"ok": True})
+
         conn = db()
         cur = conn.cursor()
-
-        if path == "/api/health":
-            conn.close()
-            return self._json(200, {"ok": True})
 
         if path == "/api/raffles":
             cur.execute("SELECT * FROM raffles ORDER BY id DESC")
