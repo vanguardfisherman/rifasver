@@ -18,11 +18,20 @@ RATE_LIMIT_MAX_REQUESTS = 20
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
+WOMPI_PUBLIC_KEY = os.environ.get("WOMPI_PUBLIC_KEY", "")
+WOMPI_INTEGRITY_SECRET = os.environ.get("WOMPI_INTEGRITY_SECRET", "")
+WOMPI_EVENTS_SECRET = os.environ.get("WOMPI_EVENTS_SECRET", "")
+
 ADMIN_TOKENS = {}
 RATE_LIMIT_BY_IP = {}
 
 
 def hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
+    text = f"{reference}{amount_in_cents}{currency}{WOMPI_INTEGRITY_SECRET}"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -176,6 +185,12 @@ def init_db():
             ],
         )
 
+    # Migration: add wompi_reference column if upgrading from older schema
+    try:
+        cur.execute("ALTER TABLE orders ADD COLUMN wompi_reference TEXT")
+    except Exception:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -321,6 +336,22 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return self._json(200, winners)
 
+        if path.startswith("/api/orders/") and path.endswith("/status"):
+            order_id = int(path.split("/")[3])
+            doc = (query.get("document", [""])[0]).strip()
+            row = cur.execute(
+                """
+                SELECT o.id, o.status, o.total, o.wompi_reference
+                FROM orders o
+                JOIN customers c ON c.id=o.customer_id
+                WHERE o.id=? AND c.document=?
+                """,
+                (order_id, doc),
+            ).fetchone()
+            if not row:
+                return self._json(404, {"error": "Orden no encontrada"})
+            return self._json(200, to_dict(row))
+
         if path.startswith("/api/orders/") and path.endswith("/receipt"):
             order_id = int(path.split("/")[3])
             document = (query.get("document", [""])[0]).strip()
@@ -441,6 +472,130 @@ class Handler(BaseHTTPRequestHandler):
             )
             conn.commit()
             return self._json(201, {"order_id": order_id, "total": total, "numbers": numbers})
+
+        if path == "/api/payments/init":
+            raffle_id = int(data["raffle_id"])
+            numbers = [str(n).zfill(4) for n in data["numbers"]]
+            raffle = cur.execute("SELECT * FROM raffles WHERE id=?", (raffle_id,)).fetchone()
+            if not raffle:
+                return self._json(400, {"error": "Rifa no existe"})
+            if raffle["status"] != "active":
+                return self._json(400, {"error": "Rifa no está activa"})
+            if len(numbers) < raffle["min_purchase"]:
+                return self._json(400, {"error": f"Mínimo {raffle['min_purchase']} números"})
+            for n in numbers:
+                if int(n) < 1 or int(n) > raffle["total_numbers"]:
+                    return self._json(400, {"error": f"Número fuera de rango: {n}"})
+
+            sold_set = {r["number"] for r in cur.execute("SELECT number FROM order_numbers WHERE raffle_id=?", (raffle_id,))}
+            conflicts = [n for n in numbers if n in sold_set]
+            if conflicts:
+                return self._json(409, {"error": "Números no disponibles", "numbers": conflicts})
+
+            customer_data = data["customer"]
+            c = cur.execute(
+                "SELECT id FROM customers WHERE document=? AND email=?",
+                (customer_data["document"], customer_data["email"]),
+            ).fetchone()
+            if c:
+                customer_id = c["id"]
+            else:
+                cur.execute(
+                    "INSERT INTO customers(document,first_name,last_name,email,phone,city) VALUES(?,?,?,?,?,?)",
+                    (
+                        customer_data["document"], customer_data["first_name"], customer_data["last_name"],
+                        customer_data["email"], customer_data["phone"], customer_data.get("city", "")
+                    ),
+                )
+                customer_id = cur.lastrowid
+
+            total = len(numbers) * raffle["ticket_price"]
+            amount_in_cents = total * 100  # COP → centavos para Wompi
+            now = datetime.utcnow().isoformat()
+
+            if WOMPI_PUBLIC_KEY and WOMPI_INTEGRITY_SECRET:
+                cur.execute(
+                    "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                    (raffle_id, customer_id, total, "pending_payment", now),
+                )
+                order_id = cur.lastrowid
+                reference = f"RIFA-{order_id}"
+                cur.execute("UPDATE orders SET wompi_reference=? WHERE id=?", (reference, order_id))
+                cur.executemany(
+                    "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                    [(order_id, raffle_id, n) for n in numbers],
+                )
+                conn.commit()
+                integrity = wompi_integrity(reference, amount_in_cents, "COP")
+                return self._json(201, {
+                    "mode": "wompi",
+                    "order_id": order_id,
+                    "reference": reference,
+                    "amount_in_cents": amount_in_cents,
+                    "public_key": WOMPI_PUBLIC_KEY,
+                    "integrity": integrity,
+                })
+            else:
+                # Modo simulado (sin Wompi configurado)
+                cur.execute(
+                    "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                    (raffle_id, customer_id, total, "paid_simulated", now),
+                )
+                order_id = cur.lastrowid
+                cur.executemany(
+                    "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                    [(order_id, raffle_id, n) for n in numbers],
+                )
+                conn.commit()
+                return self._json(201, {"mode": "simulated", "order_id": order_id, "total": total, "numbers": numbers})
+
+        if path == "/api/webhooks/wompi":
+            if not WOMPI_EVENTS_SECRET:
+                return self._json(200, {"ok": True})
+
+            # Verificar firma del evento (top-level signature)
+            top_sig = data.get("signature", {})
+            props = top_sig.get("properties", [])
+            received_checksum = top_sig.get("checksum", "")
+
+            def _nested(obj, key):
+                val = obj
+                for part in key.split("."):
+                    val = val.get(part, "") if isinstance(val, dict) else ""
+                return str(val)
+
+            concat = "".join(_nested(data, p) for p in props) + WOMPI_EVENTS_SECRET
+            expected = hashlib.sha256(concat.encode("utf-8")).hexdigest()
+            if not secrets.compare_digest(expected, received_checksum):
+                return self._json(401, {"error": "Firma inválida"})
+
+            transaction = data.get("data", {}).get("transaction", {})
+            status = transaction.get("status", "")
+            reference = transaction.get("reference", "")
+            transaction_id = transaction.get("id", "")
+
+            order = cur.execute("SELECT * FROM orders WHERE wompi_reference=?", (reference,)).fetchone()
+            if not order:
+                return self._json(200, {"ok": True})
+
+            now = datetime.utcnow().isoformat()
+            if status == "APPROVED" and order["status"] == "pending_payment":
+                cur.execute("UPDATE orders SET status='paid' WHERE id=?", (order["id"],))
+                cur.execute(
+                    "INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)",
+                    (order["raffle_id"], "payment_approved",
+                     json.dumps({"reference": reference, "transaction_id": transaction_id}), now),
+                )
+            elif status in ("DECLINED", "VOIDED", "ERROR") and order["status"] == "pending_payment":
+                cur.execute("DELETE FROM order_numbers WHERE order_id=?", (order["id"],))
+                cur.execute("UPDATE orders SET status=? WHERE id=?", (f"failed_{status.lower()}", order["id"]))
+                cur.execute(
+                    "INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)",
+                    (order["raffle_id"], "payment_failed",
+                     json.dumps({"reference": reference, "status": status}), now),
+                )
+            conn.commit()
+            return self._json(200, {"ok": True})
 
         if path.startswith("/api/admin/") and path != "/api/admin/login" and not self._require_admin():
             return self._json(401, {"error": "No autorizado"})

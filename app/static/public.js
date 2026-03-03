@@ -178,8 +178,8 @@ function selectRange() {
   renderGrid();
 }
 
-async function downloadReceipt(orderId, document) {
-  const res = await fetch(`/api/orders/${orderId}/receipt?document=${encodeURIComponent(document)}`);
+async function downloadReceipt(orderId, customerDoc) {
+  const res = await fetch(`/api/orders/${orderId}/receipt?document=${encodeURIComponent(customerDoc)}`);
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error || 'No se pudo generar el comprobante');
@@ -191,6 +191,16 @@ async function downloadReceipt(orderId, document) {
   a.click();
 }
 
+function loadWompiScript() {
+  return new Promise((resolve) => {
+    if (window.WidgetCheckout) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://checkout.wompi.co/widget.js';
+    s.onload = resolve;
+    document.head.appendChild(s);
+  });
+}
+
 function setMsg(el, text, type = 'success') {
   el.textContent = text;
   el.className = `msg-box msg-${type}`;
@@ -200,15 +210,60 @@ async function buy(e) {
   e.preventDefault();
   const msgEl = $('#msg');
   const btn = e.target.querySelector('button[type="submit"]');
+  if (!selected.size) {
+    setMsg(msgEl, '✗ Selecciona al menos un número antes de continuar', 'error');
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Procesando...';
   try {
     const customer = Object.fromEntries(new FormData(e.target).entries());
-    const out = await api('/api/orders', {method: 'POST', body: JSON.stringify({raffle_id: currentRaffle.id, numbers: [...selected], customer})});
-    await downloadReceipt(out.order_id, customer.document);
-    setMsg(msgEl, `✓ Compra exitosa. Orden #${out.order_id} — Comprobante descargado.`, 'success');
-    await onRaffleChange();
-    e.target.reset();
+    const init = await api('/api/payments/init', {
+      method: 'POST',
+      body: JSON.stringify({ raffle_id: currentRaffle.id, numbers: [...selected], customer }),
+    });
+
+    if (init.mode === 'simulated') {
+      // Modo desarrollo: sin Wompi configurado
+      try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}
+      setMsg(msgEl, `✓ Compra exitosa. Orden #${init.order_id} — Comprobante descargado.`, 'success');
+      await onRaffleChange();
+      e.target.reset();
+      return;
+    }
+
+    // Modo Wompi: abrir widget de pago
+    await loadWompiScript();
+    const checkout = new WidgetCheckout({
+      currency: 'COP',
+      amountInCents: init.amount_in_cents,
+      reference: init.reference,
+      publicKey: init.public_key,
+      signature: { integrity: init.integrity },
+      redirectUrl: window.location.href.split('?')[0],
+      customerData: {
+        email: customer.email,
+        fullName: `${customer.first_name} ${customer.last_name}`,
+        phoneNumber: customer.phone,
+        phoneNumberPrefix: '+57',
+        legalId: customer.document,
+        legalIdType: 'CC',
+      },
+    });
+
+    checkout.open(async function (result) {
+      const { transaction } = result;
+      if (transaction && transaction.status === 'APPROVED') {
+        setMsg(msgEl, `✓ ¡Pago aprobado! Orden #${init.order_id} — Descargando comprobante...`, 'success');
+        try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}
+        await onRaffleChange();
+        e.target.reset();
+      } else {
+        const st = transaction?.status || 'CANCELADO';
+        setMsg(msgEl, `✗ Pago no completado (${st}). Tus números quedaron liberados.`, 'error');
+        await onRaffleChange();
+      }
+    });
   } catch (err) {
     setMsg(msgEl, `✗ ${err.message}`, 'error');
   } finally {
