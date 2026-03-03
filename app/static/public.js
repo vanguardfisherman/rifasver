@@ -45,6 +45,14 @@ function syncSticky() {
   const qty = selected.size;
   const total = qty * Number(currentRaffle.ticket_price || 0);
   $('#stickyInfo').textContent = `${qty} seleccionados • ${formatCop(total)}`;
+  const cart = $('#stickyCart');
+  if (qty > 0) {
+    cart.style.transform = 'translateY(0)';
+    cart.style.opacity = '1';
+  } else {
+    cart.style.transform = 'translateY(100%)';
+    cart.style.opacity = '0';
+  }
 }
 
 function renderGrid() {
@@ -58,10 +66,18 @@ function renderGrid() {
   wrap.innerHTML = '';
   const fragment = document.createDocumentFragment();
 
-  for (const n of pageNumbers) {
+  for (let idx = 0; idx < pageNumbers.length; idx++) {
+    const n = pageNumbers[idx];
     const b = document.createElement('button');
     b.className = 'num';
     b.textContent = n;
+    b.style.opacity = '0';
+    b.style.transform = 'scale(0.85)';
+    b.style.transition = `opacity 0.25s ease ${idx * 0.003}s, transform 0.25s ease ${idx * 0.003}s, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease`;
+    requestAnimationFrame(() => {
+      b.style.opacity = '1';
+      b.style.transform = 'scale(1)';
+    });
     if (sold.has(n)) {
       b.classList.add('sold');
       b.disabled = true;
@@ -197,6 +213,12 @@ async function renderWinners() {
   const winners = await api(`/api/raffles/${currentRaffle.id}/winners`);
   $('#winners').innerHTML = winners.map(w => `<div class="wcard"><b>${w.label}</b><br>Número: ${w.winning_number}<br>Ganador: ${w.owner}</div>`).join('') || '<p>Sin ganadores publicados.</p>';
 }
+
+// Init sticky cart hidden
+const _cart = $('#stickyCart');
+_cart.style.transform = 'translateY(100%)';
+_cart.style.opacity = '0';
+_cart.style.transition = 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease';
 
 $('#raffleSelect').addEventListener('change', onRaffleChange);
 $('#search').addEventListener('input', () => { currentPage = 1; renderGrid(); });
