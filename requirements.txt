@@ -1,2 +1,1 @@
-# No external dependencies — uses Python standard library only
-# Python 3.10+ required
+psycopg2-binary==2.9.9

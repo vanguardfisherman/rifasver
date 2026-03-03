@@ -3,17 +3,20 @@ import hashlib
 import json
 import os
 import secrets
-import sqlite3
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import psycopg2
+import psycopg2.extras
+
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "data" / "rifas.db"
 STATIC_DIR = ROOT / "static"
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -35,11 +38,8 @@ def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-
-
 def build_pdf_receipt(lines):
     safe_lines = [line.replace('(', '').replace(')', '') for line in lines]
-    # Build content stream with each line properly positioned
     parts = ["BT", "/F1 12 Tf", "50 750 Td"]
     for i, line in enumerate(safe_lines):
         if i == 0:
@@ -50,7 +50,6 @@ def build_pdf_receipt(lines):
     stream = "\n".join(parts)
     stream_b = stream.encode("latin-1", errors="ignore")
 
-    # Build each PDF object as bytes
     hdr   = b"%PDF-1.4\n"
     obj1  = b"1 0 obj<</Type /Catalog /Pages 2 0 R>>endobj\n"
     obj2  = b"2 0 obj<</Type /Pages /Kids [3 0 R] /Count 1>>endobj\n"
@@ -59,7 +58,6 @@ def build_pdf_receipt(lines):
     obj5h = f"5 0 obj<</Length {len(stream_b)}>>stream\n".encode("latin-1")
     obj5f = b"\nendstream endobj\n"
 
-    # Compute exact byte offsets for xref table
     off1 = len(hdr)
     off2 = off1 + len(obj1)
     off3 = off2 + len(obj2)
@@ -80,31 +78,33 @@ def build_pdf_receipt(lines):
 
     return hdr + obj1 + obj2 + obj3 + obj4 + obj5h + stream_b + obj5f + xref
 
+
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
 
 
 def to_dict(row):
-    return {k: row[k] for k in row.keys()}
+    return dict(row)
 
 
 def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = db()
     cur = conn.cursor()
-    cur.executescript(
-        """
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS admins (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS raffles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             description TEXT,
             total_numbers INTEGER NOT NULL,
@@ -114,20 +114,24 @@ def init_db():
             main_prize TEXT NOT NULL,
             image_url TEXT,
             updated_at TEXT NOT NULL
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS raffle_subprizes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             raffle_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             description TEXT DEFAULT '',
             winner_rule TEXT DEFAULT 'editable_by_admin',
             created_at TEXT NOT NULL,
             FOREIGN KEY(raffle_id) REFERENCES raffles(id)
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             document TEXT NOT NULL,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
@@ -135,60 +139,78 @@ def init_db():
             phone TEXT NOT NULL,
             city TEXT DEFAULT '',
             UNIQUE(document, email)
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             raffle_id INTEGER NOT NULL,
             customer_id INTEGER NOT NULL,
             total INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'paid_simulated',
+            wompi_reference TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(raffle_id) REFERENCES raffles(id),
             FOREIGN KEY(customer_id) REFERENCES customers(id)
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS order_numbers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             order_id INTEGER NOT NULL,
             raffle_id INTEGER NOT NULL,
             number TEXT NOT NULL,
             UNIQUE(raffle_id, number),
             FOREIGN KEY(order_id) REFERENCES orders(id)
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS draw_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             raffle_id INTEGER NOT NULL,
             winner_type TEXT NOT NULL,
             label TEXT NOT NULL,
             winning_number TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY(raffle_id) REFERENCES raffles(id)
-        );
+        )
+    """)
 
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             raffle_id INTEGER,
             action TEXT NOT NULL,
             payload TEXT,
             created_at TEXT NOT NULL
-        );
-        """
-    )
+        )
+    """)
 
-    if cur.execute("SELECT COUNT(*) c FROM admins").fetchone()["c"] == 0:
+    # Migration: add wompi_reference if upgrading from older schema
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE orders ADD COLUMN wompi_reference TEXT;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$
+    """)
+
+    cur.execute("SELECT COUNT(*) AS c FROM admins")
+    if cur.fetchone()["c"] == 0:
         cur.execute(
-            "INSERT INTO admins(username,password_hash,created_at) VALUES(?,?,?)",
+            "INSERT INTO admins(username, password_hash, created_at) VALUES(%s, %s, %s)",
             (ADMIN_USER, hash_text(ADMIN_PASSWORD), datetime.utcnow().isoformat()),
         )
 
-    if cur.execute("SELECT COUNT(*) c FROM raffles").fetchone()["c"] == 0:
+    cur.execute("SELECT COUNT(*) AS c FROM raffles")
+    if cur.fetchone()["c"] == 0:
         now = datetime.utcnow().isoformat()
         cur.execute(
             """
             INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, status, main_prize, image_url, updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?)
+            VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
             (
                 "🎉 Gana $4.000.000",
@@ -202,20 +224,14 @@ def init_db():
                 now,
             ),
         )
-        raffle_id = cur.lastrowid
+        raffle_id = cur.fetchone()["id"]
         cur.executemany(
-            "INSERT INTO raffle_subprizes(raffle_id,name,description,winner_rule,created_at) VALUES(?,?,?,?,?)",
+            "INSERT INTO raffle_subprizes(raffle_id, name, description, winner_rule, created_at) VALUES(%s, %s, %s, %s, %s)",
             [
                 (raffle_id, "Subpremio 1", "$250.000", "editable_by_admin", now),
                 (raffle_id, "Subpremio 2", "$250.000", "editable_by_admin", now),
             ],
         )
-
-    # Migration: add wompi_reference column if upgrading from older schema
-    try:
-        cur.execute("ALTER TABLE orders ADD COLUMN wompi_reference TEXT")
-    except Exception:
-        pass  # Column already exists
 
     conn.commit()
     conn.close()
@@ -306,74 +322,90 @@ class Handler(BaseHTTPRequestHandler):
         cur = conn.cursor()
 
         if path == "/api/health":
+            conn.close()
             return self._json(200, {"ok": True})
 
         if path == "/api/raffles":
-            rows = [to_dict(r) for r in cur.execute("SELECT * FROM raffles ORDER BY id DESC")]
+            cur.execute("SELECT * FROM raffles ORDER BY id DESC")
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
             return self._json(200, rows)
 
         if path.startswith("/api/raffles/") and path.endswith("/numbers"):
             raffle_id = int(path.split("/")[3])
-            sold = [r["number"] for r in cur.execute("SELECT number FROM order_numbers WHERE raffle_id = ?", (raffle_id,))]
+            cur.execute("SELECT number FROM order_numbers WHERE raffle_id = %s", (raffle_id,))
+            sold = [r["number"] for r in cur.fetchall()]
+            conn.close()
             return self._json(200, {"sold": sold})
 
         if path.startswith("/api/raffles/") and path.endswith("/subprizes"):
             raffle_id = int(path.split("/")[3])
-            rows = [to_dict(r) for r in cur.execute("SELECT * FROM raffle_subprizes WHERE raffle_id=? ORDER BY id", (raffle_id,))]
+            cur.execute("SELECT * FROM raffle_subprizes WHERE raffle_id=%s ORDER BY id", (raffle_id,))
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
             return self._json(200, rows)
 
         if path == "/api/tickets/query":
             if is_rate_limited(self._client_ip()):
+                conn.close()
                 return self._json(429, {"error": "Demasiadas consultas. Intenta nuevamente en 1 minuto."})
             key = (query.get("key", [""])[0]).strip().lower()
-            rows = cur.execute(
+            cur.execute(
                 """
-                SELECT o.id order_id, o.total, o.created_at, c.email, c.document,
-                GROUP_CONCAT(onm.number) numbers
+                SELECT o.id AS order_id, o.total, o.created_at, c.email, c.document,
+                STRING_AGG(onm.number, ',') AS numbers
                 FROM orders o
                 JOIN customers c ON c.id=o.customer_id
                 JOIN order_numbers onm ON onm.order_id=o.id
-                WHERE lower(c.email)=? OR lower(c.document)=?
-                GROUP BY o.id ORDER BY o.id DESC
+                WHERE lower(c.email)=%s OR lower(c.document)=%s
+                GROUP BY o.id, o.total, o.created_at, c.email, c.document
+                ORDER BY o.id DESC
                 """,
                 (key, key),
-            ).fetchall()
-            return self._json(200, [to_dict(r) for r in rows])
+            )
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, rows)
 
         if path.startswith("/api/raffles/") and path.endswith("/winners"):
             raffle_id = int(path.split("/")[3])
-            rows = cur.execute("SELECT * FROM draw_results WHERE raffle_id=? ORDER BY id", (raffle_id,)).fetchall()
+            cur.execute("SELECT * FROM draw_results WHERE raffle_id=%s ORDER BY id", (raffle_id,))
+            results = cur.fetchall()
             winners = []
-            for r in rows:
-                owner = cur.execute(
+            for r in results:
+                cur.execute(
                     """
-                    SELECT c.first_name,c.last_name,c.city
+                    SELECT c.first_name, c.last_name, c.city
                     FROM order_numbers n
                     JOIN orders o ON o.id=n.order_id
                     JOIN customers c ON c.id=o.customer_id
-                    WHERE n.raffle_id=? AND n.number=?
+                    WHERE n.raffle_id=%s AND n.number=%s
                     LIMIT 1
                     """,
                     (raffle_id, r["winning_number"]),
-                ).fetchone()
+                )
+                owner = cur.fetchone()
                 winners.append({
                     **to_dict(r),
                     "owner": f"{owner['first_name'][0]}*** {owner['last_name'][0]}*** • {owner['city'] or 'N/D'}" if owner else "Sin asignar",
                 })
+            conn.close()
             return self._json(200, winners)
 
         if path.startswith("/api/orders/") and path.endswith("/status"):
             order_id = int(path.split("/")[3])
             doc = (query.get("document", [""])[0]).strip()
-            row = cur.execute(
+            cur.execute(
                 """
                 SELECT o.id, o.status, o.total, o.wompi_reference
                 FROM orders o
                 JOIN customers c ON c.id=o.customer_id
-                WHERE o.id=? AND c.document=?
+                WHERE o.id=%s AND c.document=%s
                 """,
                 (order_id, doc),
-            ).fetchone()
+            )
+            row = cur.fetchone()
+            conn.close()
             if not row:
                 return self._json(404, {"error": "Orden no encontrada"})
             return self._json(200, to_dict(row))
@@ -381,19 +413,21 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/orders/") and path.endswith("/receipt"):
             order_id = int(path.split("/")[3])
             document = (query.get("document", [""])[0]).strip()
-            row = cur.execute(
+            cur.execute(
                 """
                 SELECT o.id, o.total, o.created_at, c.document, c.first_name, c.last_name, r.title,
-                GROUP_CONCAT(n.number) numbers
+                STRING_AGG(n.number, ',') AS numbers
                 FROM orders o
                 JOIN customers c ON c.id=o.customer_id
                 JOIN raffles r ON r.id=o.raffle_id
                 JOIN order_numbers n ON n.order_id=o.id
-                WHERE o.id=?
-                GROUP BY o.id
+                WHERE o.id=%s
+                GROUP BY o.id, o.total, o.created_at, c.document, c.first_name, c.last_name, r.title
                 """,
                 (order_id,),
-            ).fetchone()
+            )
+            row = cur.fetchone()
+            conn.close()
             if not row:
                 return self._json(404, {"error": "Orden no encontrada"})
             if document != row["document"]:
@@ -419,26 +453,36 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/admin/orders":
             if not self._require_admin():
+                conn.close()
                 return self._json(401, {"error": "No autorizado"})
-            rows = cur.execute(
+            cur.execute(
                 """
-                SELECT o.id, o.total, o.status, o.created_at, r.title raffle_title,
-                c.first_name, c.last_name, c.email, c.document, GROUP_CONCAT(n.number) numbers
+                SELECT o.id, o.total, o.status, o.created_at, r.title AS raffle_title,
+                c.first_name, c.last_name, c.email, c.document,
+                STRING_AGG(n.number, ',') AS numbers
                 FROM orders o
                 JOIN raffles r ON r.id=o.raffle_id
                 JOIN customers c ON c.id=o.customer_id
                 JOIN order_numbers n ON n.order_id=o.id
-                GROUP BY o.id ORDER BY o.id DESC
+                GROUP BY o.id, o.total, o.status, o.created_at, r.title,
+                         c.first_name, c.last_name, c.email, c.document
+                ORDER BY o.id DESC
                 """
-            ).fetchall()
-            return self._json(200, [to_dict(r) for r in rows])
+            )
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, rows)
 
         if path == "/api/admin/audit-logs":
             if not self._require_admin():
+                conn.close()
                 return self._json(401, {"error": "No autorizado"})
-            rows = cur.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 50").fetchall()
-            return self._json(200, [to_dict(r) for r in rows])
+            cur.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 50")
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, rows)
 
+        conn.close()
         return self._json(404, {"error": "Not found"})
 
     def api_post(self, path):
@@ -449,10 +493,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/login":
             username = data.get("username", "")
             password = data.get("password", "")
-            admin = cur.execute(
-                "SELECT * FROM admins WHERE username=? AND password_hash=?",
+            cur.execute(
+                "SELECT * FROM admins WHERE username=%s AND password_hash=%s",
                 (username, hash_text(password)),
-            ).fetchone()
+            )
+            admin = cur.fetchone()
+            conn.close()
             if not admin:
                 return self._json(401, {"error": "Credenciales inválidas"})
             token = secrets.token_urlsafe(24)
@@ -462,104 +508,121 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/orders":
             raffle_id = int(data["raffle_id"])
             numbers = [str(n).zfill(4) for n in data["numbers"]]
-            raffle = cur.execute("SELECT * FROM raffles WHERE id=?", (raffle_id,)).fetchone()
+            cur.execute("SELECT * FROM raffles WHERE id=%s", (raffle_id,))
+            raffle = cur.fetchone()
             if not raffle:
+                conn.close()
                 return self._json(400, {"error": "Rifa no existe"})
             if len(numbers) < raffle["min_purchase"]:
+                conn.close()
                 return self._json(400, {"error": f"Mínimo {raffle['min_purchase']}"})
             for n in numbers:
                 if int(n) < 1 or int(n) > raffle["total_numbers"]:
+                    conn.close()
                     return self._json(400, {"error": f"Número fuera de rango: {n}"})
 
-            sold = {r["number"] for r in cur.execute("SELECT number FROM order_numbers WHERE raffle_id=?", (raffle_id,))}
+            cur.execute("SELECT number FROM order_numbers WHERE raffle_id=%s", (raffle_id,))
+            sold = {r["number"] for r in cur.fetchall()}
             conflicts = [n for n in numbers if n in sold]
             if conflicts:
+                conn.close()
                 return self._json(409, {"error": "Números no disponibles", "numbers": conflicts})
 
             customer_data = data["customer"]
-            c = cur.execute(
-                "SELECT id FROM customers WHERE document=? AND email=?",
+            cur.execute(
+                "SELECT id FROM customers WHERE document=%s AND email=%s",
                 (customer_data["document"], customer_data["email"]),
-            ).fetchone()
+            )
+            c = cur.fetchone()
             if c:
                 customer_id = c["id"]
             else:
                 cur.execute(
-                    "INSERT INTO customers(document,first_name,last_name,email,phone,city) VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO customers(document, first_name, last_name, email, phone, city) VALUES(%s, %s, %s, %s, %s, %s) RETURNING id",
                     (
                         customer_data["document"], customer_data["first_name"], customer_data["last_name"],
                         customer_data["email"], customer_data["phone"], customer_data.get("city", "")
                     ),
                 )
-                customer_id = cur.lastrowid
+                customer_id = cur.fetchone()["id"]
 
             total = len(numbers) * raffle["ticket_price"]
             now = datetime.utcnow().isoformat()
             cur.execute(
-                "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                "INSERT INTO orders(raffle_id, customer_id, total, status, created_at) VALUES(%s, %s, %s, %s, %s) RETURNING id",
                 (raffle_id, customer_id, total, "paid_simulated", now),
             )
-            order_id = cur.lastrowid
+            order_id = cur.fetchone()["id"]
             cur.executemany(
-                "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                "INSERT INTO order_numbers(order_id, raffle_id, number) VALUES(%s, %s, %s)",
                 [(order_id, raffle_id, n) for n in numbers],
             )
             conn.commit()
+            conn.close()
             return self._json(201, {"order_id": order_id, "total": total, "numbers": numbers})
 
         if path == "/api/payments/init":
             raffle_id = int(data["raffle_id"])
             numbers = [str(n).zfill(4) for n in data["numbers"]]
-            raffle = cur.execute("SELECT * FROM raffles WHERE id=?", (raffle_id,)).fetchone()
+            cur.execute("SELECT * FROM raffles WHERE id=%s", (raffle_id,))
+            raffle = cur.fetchone()
             if not raffle:
+                conn.close()
                 return self._json(400, {"error": "Rifa no existe"})
             if raffle["status"] != "active":
+                conn.close()
                 return self._json(400, {"error": "Rifa no está activa"})
             if len(numbers) < raffle["min_purchase"]:
+                conn.close()
                 return self._json(400, {"error": f"Mínimo {raffle['min_purchase']} números"})
             for n in numbers:
                 if int(n) < 1 or int(n) > raffle["total_numbers"]:
+                    conn.close()
                     return self._json(400, {"error": f"Número fuera de rango: {n}"})
 
-            sold_set = {r["number"] for r in cur.execute("SELECT number FROM order_numbers WHERE raffle_id=?", (raffle_id,))}
+            cur.execute("SELECT number FROM order_numbers WHERE raffle_id=%s", (raffle_id,))
+            sold_set = {r["number"] for r in cur.fetchall()}
             conflicts = [n for n in numbers if n in sold_set]
             if conflicts:
+                conn.close()
                 return self._json(409, {"error": "Números no disponibles", "numbers": conflicts})
 
             customer_data = data["customer"]
-            c = cur.execute(
-                "SELECT id FROM customers WHERE document=? AND email=?",
+            cur.execute(
+                "SELECT id FROM customers WHERE document=%s AND email=%s",
                 (customer_data["document"], customer_data["email"]),
-            ).fetchone()
+            )
+            c = cur.fetchone()
             if c:
                 customer_id = c["id"]
             else:
                 cur.execute(
-                    "INSERT INTO customers(document,first_name,last_name,email,phone,city) VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO customers(document, first_name, last_name, email, phone, city) VALUES(%s, %s, %s, %s, %s, %s) RETURNING id",
                     (
                         customer_data["document"], customer_data["first_name"], customer_data["last_name"],
                         customer_data["email"], customer_data["phone"], customer_data.get("city", "")
                     ),
                 )
-                customer_id = cur.lastrowid
+                customer_id = cur.fetchone()["id"]
 
             total = len(numbers) * raffle["ticket_price"]
-            amount_in_cents = total * 100  # COP → centavos para Wompi
+            amount_in_cents = total * 100
             now = datetime.utcnow().isoformat()
 
             if WOMPI_PUBLIC_KEY and WOMPI_INTEGRITY_SECRET:
                 cur.execute(
-                    "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                    "INSERT INTO orders(raffle_id, customer_id, total, status, created_at) VALUES(%s, %s, %s, %s, %s) RETURNING id",
                     (raffle_id, customer_id, total, "pending_payment", now),
                 )
-                order_id = cur.lastrowid
+                order_id = cur.fetchone()["id"]
                 reference = f"RIFA-{order_id}"
-                cur.execute("UPDATE orders SET wompi_reference=? WHERE id=?", (reference, order_id))
+                cur.execute("UPDATE orders SET wompi_reference=%s WHERE id=%s", (reference, order_id))
                 cur.executemany(
-                    "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                    "INSERT INTO order_numbers(order_id, raffle_id, number) VALUES(%s, %s, %s)",
                     [(order_id, raffle_id, n) for n in numbers],
                 )
                 conn.commit()
+                conn.close()
                 integrity = wompi_integrity(reference, amount_in_cents, "COP")
                 return self._json(201, {
                     "mode": "wompi",
@@ -570,24 +633,24 @@ class Handler(BaseHTTPRequestHandler):
                     "integrity": integrity,
                 })
             else:
-                # Modo simulado (sin Wompi configurado)
                 cur.execute(
-                    "INSERT INTO orders(raffle_id,customer_id,total,status,created_at) VALUES(?,?,?,?,?)",
+                    "INSERT INTO orders(raffle_id, customer_id, total, status, created_at) VALUES(%s, %s, %s, %s, %s) RETURNING id",
                     (raffle_id, customer_id, total, "paid_simulated", now),
                 )
-                order_id = cur.lastrowid
+                order_id = cur.fetchone()["id"]
                 cur.executemany(
-                    "INSERT INTO order_numbers(order_id,raffle_id,number) VALUES(?,?,?)",
+                    "INSERT INTO order_numbers(order_id, raffle_id, number) VALUES(%s, %s, %s)",
                     [(order_id, raffle_id, n) for n in numbers],
                 )
                 conn.commit()
+                conn.close()
                 return self._json(201, {"mode": "simulated", "order_id": order_id, "total": total, "numbers": numbers})
 
         if path == "/api/webhooks/wompi":
             if not WOMPI_EVENTS_SECRET:
+                conn.close()
                 return self._json(200, {"ok": True})
 
-            # Verificar firma del evento (top-level signature)
             top_sig = data.get("signature", {})
             props = top_sig.get("properties", [])
             received_checksum = top_sig.get("checksum", "")
@@ -601,6 +664,7 @@ class Handler(BaseHTTPRequestHandler):
             concat = "".join(_nested(data, p) for p in props) + WOMPI_EVENTS_SECRET
             expected = hashlib.sha256(concat.encode("utf-8")).hexdigest()
             if not secrets.compare_digest(expected, received_checksum):
+                conn.close()
                 return self._json(401, {"error": "Firma inválida"})
 
             transaction = data.get("data", {}).get("transaction", {})
@@ -608,78 +672,95 @@ class Handler(BaseHTTPRequestHandler):
             reference = transaction.get("reference", "")
             transaction_id = transaction.get("id", "")
 
-            order = cur.execute("SELECT * FROM orders WHERE wompi_reference=?", (reference,)).fetchone()
+            cur.execute("SELECT * FROM orders WHERE wompi_reference=%s", (reference,))
+            order = cur.fetchone()
             if not order:
+                conn.close()
                 return self._json(200, {"ok": True})
 
             now = datetime.utcnow().isoformat()
             if status == "APPROVED" and order["status"] == "pending_payment":
-                cur.execute("UPDATE orders SET status='paid' WHERE id=?", (order["id"],))
+                cur.execute("UPDATE orders SET status='paid' WHERE id=%s", (order["id"],))
                 cur.execute(
-                    "INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)",
+                    "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                     (order["raffle_id"], "payment_approved",
                      json.dumps({"reference": reference, "transaction_id": transaction_id}), now),
                 )
             elif status in ("DECLINED", "VOIDED", "ERROR") and order["status"] == "pending_payment":
-                cur.execute("DELETE FROM order_numbers WHERE order_id=?", (order["id"],))
-                cur.execute("UPDATE orders SET status=? WHERE id=?", (f"failed_{status.lower()}", order["id"]))
+                cur.execute("DELETE FROM order_numbers WHERE order_id=%s", (order["id"],))
+                cur.execute("UPDATE orders SET status=%s WHERE id=%s", (f"failed_{status.lower()}", order["id"]))
                 cur.execute(
-                    "INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)",
+                    "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                     (order["raffle_id"], "payment_failed",
                      json.dumps({"reference": reference, "status": status}), now),
                 )
             conn.commit()
+            conn.close()
             return self._json(200, {"ok": True})
 
         if path.startswith("/api/admin/") and path != "/api/admin/login" and not self._require_admin():
+            conn.close()
             return self._json(401, {"error": "No autorizado"})
 
         if path == "/api/admin/raffles":
             now = datetime.utcnow().isoformat()
             cur.execute(
                 """
-                INSERT INTO raffles(title,description,total_numbers,ticket_price,min_purchase,status,main_prize,image_url,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?)
+                INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, status, main_prize, image_url, updated_at)
+                VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
                 """,
                 (
                     data["title"], data.get("description", ""), int(data["total_numbers"]), int(data["ticket_price"]),
                     int(data.get("min_purchase", 1)), data.get("status", "active"), data.get("main_prize", ""), data.get("image_url", ""), now
                 )
             )
-            rid = cur.lastrowid
-            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (rid, "create_raffle", json.dumps(data), now))
+            rid = cur.fetchone()["id"]
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (rid, "create_raffle", json.dumps(data), now)
+            )
             conn.commit()
+            conn.close()
             return self._json(201, {"id": rid})
 
         if path.startswith("/api/admin/raffles/") and path.endswith("/subprizes"):
             raffle_id = int(path.split("/")[4])
             subprizes = data.get("subprizes", [])
             now = datetime.utcnow().isoformat()
-            cur.execute("DELETE FROM raffle_subprizes WHERE raffle_id=?", (raffle_id,))
+            cur.execute("DELETE FROM raffle_subprizes WHERE raffle_id=%s", (raffle_id,))
             for item in subprizes:
                 cur.execute(
-                    "INSERT INTO raffle_subprizes(raffle_id,name,description,winner_rule,created_at) VALUES(?,?,?,?,?)",
+                    "INSERT INTO raffle_subprizes(raffle_id, name, description, winner_rule, created_at) VALUES(%s, %s, %s, %s, %s)",
                     (raffle_id, item.get("name", "Subpremio"), item.get("description", ""), item.get("winner_rule", "editable_by_admin"), now),
                 )
-            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (raffle_id, "set_subprizes", json.dumps(data), now))
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (raffle_id, "set_subprizes", json.dumps(data), now)
+            )
             conn.commit()
+            conn.close()
             return self._json(200, {"ok": True})
 
         if path.startswith("/api/admin/raffles/") and path.endswith("/draw-results"):
             raffle_id = int(path.split("/")[4])
             results = data.get("results", [])
             now = datetime.utcnow().isoformat()
-            cur.execute("DELETE FROM draw_results WHERE raffle_id=?", (raffle_id,))
+            cur.execute("DELETE FROM draw_results WHERE raffle_id=%s", (raffle_id,))
             for item in results:
                 num = str(item["winning_number"]).zfill(4)
                 cur.execute(
-                    "INSERT INTO draw_results(raffle_id,winner_type,label,winning_number,created_at) VALUES(?,?,?,?,?)",
+                    "INSERT INTO draw_results(raffle_id, winner_type, label, winning_number, created_at) VALUES(%s, %s, %s, %s, %s)",
                     (raffle_id, item.get("winner_type", "subprize"), item.get("label", "Premio"), num, now),
                 )
-            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (raffle_id, "set_winners", json.dumps(data), now))
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (raffle_id, "set_winners", json.dumps(data), now)
+            )
             conn.commit()
+            conn.close()
             return self._json(200, {"ok": True})
 
+        conn.close()
         return self._json(404, {"error": "Not found"})
 
     def api_patch(self, path):
@@ -696,18 +777,24 @@ class Handler(BaseHTTPRequestHandler):
             sets, vals = [], []
             for k in allowed:
                 if k in data:
-                    sets.append(f"{k}=?")
+                    sets.append(f"{k}=%s")
                     vals.append(data[k])
             if not sets:
+                conn.close()
                 return self._json(400, {"error": "Sin cambios"})
-            sets.append("updated_at=?")
+            sets.append("updated_at=%s")
             vals.append(datetime.utcnow().isoformat())
             vals.append(raffle_id)
-            cur.execute(f"UPDATE raffles SET {', '.join(sets)} WHERE id=?", vals)
-            cur.execute("INSERT INTO audit_logs(raffle_id,action,payload,created_at) VALUES(?,?,?,?)", (raffle_id, "update_raffle", json.dumps(data), datetime.utcnow().isoformat()))
+            cur.execute(f"UPDATE raffles SET {', '.join(sets)} WHERE id=%s", vals)
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (raffle_id, "update_raffle", json.dumps(data), datetime.utcnow().isoformat())
+            )
             conn.commit()
+            conn.close()
             return self._json(200, {"ok": True})
 
+        conn.close()
         return self._json(404, {"error": "Not found"})
 
 
