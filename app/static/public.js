@@ -185,33 +185,70 @@ async function downloadReceipt(orderId, document) {
   a.click();
 }
 
+function setMsg(el, text, type = 'success') {
+  el.textContent = text;
+  el.className = `msg-box msg-${type}`;
+}
+
 async function buy(e) {
   e.preventDefault();
+  const msgEl = $('#msg');
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
   try {
     const customer = Object.fromEntries(new FormData(e.target).entries());
     const out = await api('/api/orders', {method: 'POST', body: JSON.stringify({raffle_id: currentRaffle.id, numbers: [...selected], customer})});
     await downloadReceipt(out.order_id, customer.document);
-    $('#msg').textContent = `Compra exitosa. Orden #${out.order_id}. Comprobante descargado.`;
+    setMsg(msgEl, `✓ Compra exitosa. Orden #${out.order_id} — Comprobante descargado.`, 'success');
     await onRaffleChange();
     e.target.reset();
   } catch (err) {
-    $('#msg').textContent = err.message;
+    setMsg(msgEl, `✗ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar y pagar';
   }
 }
 
 async function lookup() {
+  const key = $('#lookup').value.trim();
+  if (!key) return;
   try {
-    const key = $('#lookup').value.trim();
     const out = await api(`/api/tickets/query?key=${encodeURIComponent(key)}`);
-    $('#lookupOut').innerHTML = out.map(o => `<li>Orden #${o.order_id} • ${o.numbers}</li>`).join('') || '<li>Sin resultados</li>';
+    if (!out.length) {
+      $('#lookupOut').innerHTML = '<li><div class="empty-state"><span class="empty-icon">🎫</span><p>No encontramos ordenes con ese dato.</p></div></li>';
+      return;
+    }
+    $('#lookupOut').innerHTML = out.map(o => {
+      const nums = o.numbers.split(',');
+      return `<li>
+        <div class="order-item">
+          <div class="order-item-header">
+            <span class="order-id">Orden #${o.order_id}</span>
+            <span class="order-count">${nums.length} ${nums.length === 1 ? 'numero' : 'numeros'}</span>
+          </div>
+          <div class="order-numbers">${o.numbers}</div>
+        </div>
+      </li>`;
+    }).join('');
   } catch (err) {
-    $('#lookupOut').innerHTML = `<li>${err.message}</li>`;
+    $('#lookupOut').innerHTML = `<li><span style="color:var(--danger-text)">${err.message}</span></li>`;
   }
 }
 
 async function renderWinners() {
   const winners = await api(`/api/raffles/${currentRaffle.id}/winners`);
-  $('#winners').innerHTML = winners.map(w => `<div class="wcard"><b>${w.label}</b><br>Número: ${w.winning_number}<br>Ganador: ${w.owner}</div>`).join('') || '<p>Sin ganadores publicados.</p>';
+  if (!winners.length) {
+    $('#winners').innerHTML = '<div class="empty-state"><span class="empty-icon">🏆</span><p>Aun no hay ganadores publicados.</p></div>';
+    return;
+  }
+  $('#winners').innerHTML = winners.map(w => `
+    <div class="wcard">
+      <span class="wcard-label">${w.label}</span>
+      <span class="wcard-number">${w.winning_number}</span>
+      <span class="wcard-owner">👤 ${w.owner}</span>
+    </div>`).join('');
 }
 
 // Init sticky cart hidden

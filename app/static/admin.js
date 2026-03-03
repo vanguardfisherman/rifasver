@@ -13,13 +13,27 @@ async function api(path, options = {}) {
   return data;
 }
 
+function setMsg(el, text, type = 'info') {
+  el.textContent = text;
+  el.className = `msg-box msg-${type}`;
+}
+
 function setState(ok){
   $('#adminArea').classList.toggle('hidden', !ok);
-  $('#adminMsg').textContent = ok ? 'Sesión admin activa' : 'Inicia sesión';
+  const msg = $('#adminMsg');
+  if (ok) {
+    setMsg(msg, '✓ Sesion admin activa', 'success');
+  } else {
+    msg.textContent = '';
+    msg.className = '';
+  }
 }
 
 async function login(e){
   e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
   try{
     const creds = Object.fromEntries(new FormData(e.target).entries());
     const out = await api('/api/admin/login', {method:'POST', body: JSON.stringify(creds), headers:{}});
@@ -27,7 +41,12 @@ async function login(e){
     localStorage.setItem('admin_token', token);
     setState(true);
     await loadRaffles();
-  }catch(err){ $('#adminMsg').textContent = err.message; }
+  }catch(err){
+    setMsg($('#adminMsg'), `✗ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingresar';
+  }
 }
 
 async function loadRaffles(){
@@ -56,16 +75,21 @@ async function onRaffleSelect(){
 
 async function saveRaffle(e){
   e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
   try{
     const payload = Object.fromEntries(new FormData(e.target).entries());
     await api(`/api/admin/raffles/${currentRaffle.id}`, {method:'PATCH', body: JSON.stringify(payload)});
-    $('#adminMsg').textContent = 'Rifa actualizada';
+    setMsg($('#adminMsg'), '✓ Rifa actualizada correctamente', 'success');
     await loadRaffles();
-  }catch(err){ $('#adminMsg').textContent = err.message; }
+  }catch(err){ setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
+  finally { btn.disabled = false; }
 }
 
 async function saveSubprizes(e){
   e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
   try{
     const lines = $('#subprizesInput').value.split('\n').map(s=>s.trim()).filter(Boolean);
     const subprizes = lines.map(line => {
@@ -73,12 +97,15 @@ async function saveSubprizes(e){
       return {name: name.trim(), description: description.trim(), winner_rule: 'editable_by_admin'};
     });
     await api(`/api/admin/raffles/${currentRaffle.id}/subprizes`, {method:'POST', body: JSON.stringify({subprizes})});
-    $('#adminMsg').textContent = 'Subpremios actualizados';
-  }catch(err){ $('#adminMsg').textContent = err.message; }
+    setMsg($('#adminMsg'), '✓ Subpremios actualizados', 'success');
+  }catch(err){ setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
+  finally { btn.disabled = false; }
 }
 
 async function setWinners(e){
   e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
   try{
     const fd = new FormData(e.target);
     const results = [
@@ -86,22 +113,57 @@ async function setWinners(e){
       {winner_type:'subprize', label:'Subpremio', winning_number: fd.get('sub') || '0000'},
     ];
     await api(`/api/admin/raffles/${currentRaffle.id}/draw-results`, {method:'POST', body: JSON.stringify({results})});
-    $('#adminMsg').textContent = 'Ganadores publicados';
-  }catch(err){ $('#adminMsg').textContent = err.message; }
+    setMsg($('#adminMsg'), '🏆 Ganadores publicados exitosamente', 'success');
+  }catch(err){ setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
+  finally { btn.disabled = false; }
 }
 
 async function loadOrders(){
+  const btn = $('#loadOrders');
+  btn.disabled = true;
+  btn.textContent = 'Cargando...';
   try{
     const rows = await api('/api/admin/orders');
-    $('#ordersOut').innerHTML = rows.map(r=>`<li>#${r.id} • ${r.raffle_title} • ${r.first_name} ${r.last_name} • ${r.numbers}</li>`).join('') || '<li>Sin órdenes</li>';
-  }catch(err){ $('#ordersOut').innerHTML = `<li>${err.message}</li>`; }
+    if (!rows.length) {
+      $('#ordersOut').innerHTML = '<li><div class="empty-state"><span class="empty-icon">📋</span><p>No hay ordenes aun.</p></div></li>';
+      return;
+    }
+    $('#ordersOut').innerHTML = rows.map(r => {
+      const nums = (r.numbers || '').split(',');
+      return `<li>
+        <div class="order-item">
+          <div class="order-item-header">
+            <span class="order-id">Orden #${r.id} — ${r.first_name} ${r.last_name}</span>
+            <span class="order-count">${nums.length} ${nums.length === 1 ? 'numero' : 'numeros'}</span>
+          </div>
+          <div class="order-numbers">${r.raffle_title} &bull; ${r.numbers}</div>
+        </div>
+      </li>`;
+    }).join('');
+  }catch(err){ $('#ordersOut').innerHTML = `<li style="color:var(--danger-text)">${err.message}</li>`; }
+  finally { btn.disabled = false; btn.textContent = 'Cargar ordenes'; }
 }
 
 async function loadAudit(){
+  const btn = $('#loadAudit');
+  btn.disabled = true;
+  btn.textContent = 'Cargando...';
   try{
     const rows = await api('/api/admin/audit-logs');
-    $('#auditOut').innerHTML = rows.map(r=>`<li>${r.action} • ${r.created_at}</li>`).join('') || '<li>Sin auditoría</li>';
-  }catch(err){ $('#auditOut').innerHTML = `<li>${err.message}</li>`; }
+    if (!rows.length) {
+      $('#auditOut').innerHTML = '<li><div class="empty-state"><span class="empty-icon">📊</span><p>Sin registros de auditoria.</p></div></li>';
+      return;
+    }
+    $('#auditOut').innerHTML = rows.map(r => `<li>
+      <div class="order-item">
+        <div class="order-item-header">
+          <span class="order-id">${r.action}</span>
+          <span class="order-count" style="background:rgba(100,116,139,0.12);color:var(--text-muted)">${new Date(r.created_at).toLocaleString('es-CO')}</span>
+        </div>
+      </div>
+    </li>`).join('');
+  }catch(err){ $('#auditOut').innerHTML = `<li style="color:var(--danger-text)">${err.message}</li>`; }
+  finally { btn.disabled = false; btn.textContent = 'Cargar auditoria'; }
 }
 
 $('#adminLogin').addEventListener('submit', login);

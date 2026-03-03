@@ -14,8 +14,8 @@
 <body>
   <header class="hero">
     <div>
-      <h1>Plataforma de Rifas</h1>
-      <p>Compra tus numeros y gana</p>
+      <h1><span class="hero-icon">🎟</span>Rifasver</h1>
+      <p>Compra tus numeros y gana <span class="live-badge">En vivo</span></p>
     </div>
     <nav>
       <a href="/">Inicio</a>
@@ -97,24 +97,24 @@
 
     <!-- CHECKOUT -->
     <section class="panel">
-      <h2>Checkout</h2>
+      <h2><span class="section-icon green">💳</span>Finalizar compra</h2>
       <form id="checkout" autocomplete="on">
-        <input name="document" placeholder="Documento" required aria-label="Documento" />
+        <input name="document" placeholder="Numero de documento" required aria-label="Documento" />
         <input name="first_name" placeholder="Nombre" required aria-label="Nombre" autocomplete="given-name" />
         <input name="last_name" placeholder="Apellido" required aria-label="Apellido" autocomplete="family-name" />
         <input type="email" name="email" placeholder="Correo electronico" required aria-label="Correo" autocomplete="email" />
-        <input name="phone" placeholder="Celular" required aria-label="Celular" autocomplete="tel" />
-        <input name="city" placeholder="Ciudad" aria-label="Ciudad" />
-        <button type="submit">Pagar</button>
+        <input name="phone" placeholder="Numero de celular" required aria-label="Celular" autocomplete="tel" />
+        <input name="city" placeholder="Ciudad (opcional)" aria-label="Ciudad" />
+        <button type="submit">Confirmar y pagar</button>
       </form>
       <p id="msg"></p>
     </section>
 
     <!-- LOOKUP -->
     <section class="panel">
-      <h2>Consulta tus entradas</h2>
+      <h2><span class="section-icon blue">🔍</span>Consulta tus entradas</h2>
       <div class="actions">
-        <input id="lookup" placeholder="Correo o documento" aria-label="Consultar entradas" />
+        <input id="lookup" placeholder="Busca por correo o documento" aria-label="Consultar entradas" />
         <button id="lookupBtn" type="button">Consultar</button>
       </div>
       <ul id="lookupOut" role="list"></ul>
@@ -122,7 +122,7 @@
 
     <!-- WINNERS -->
     <section class="panel">
-      <h2>Ganadores publicados</h2>
+      <h2><span class="section-icon gold">🏆</span>Ganadores publicados</h2>
       <div id="winners" class="winners" role="list"></div>
     </section>
   </main>
