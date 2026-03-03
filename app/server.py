@@ -39,20 +39,46 @@ def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
 
 def build_pdf_receipt(lines):
     safe_lines = [line.replace('(', '').replace(')', '') for line in lines]
-    text = "\n".join(safe_lines)
-    stream = f"BT /F1 12 Tf 50 760 Td ({text}) Tj ET"
-    pdf = (
-        "%PDF-1.4\n"
-        "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n"
-        "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n"
-        "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n"
-        "4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"
-        f"5 0 obj<< /Length {len(stream)} >>stream\n{stream}\nendstream endobj\n"
-        "xref\n0 6\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n0000000243 00000 n \n0000000313 00000 n \n"
-        "trailer<< /Size 6 /Root 1 0 R >>\n"
-        f"startxref\n{350 + len(stream)}\n%%EOF"
-    )
-    return pdf.encode('latin-1', errors='ignore')
+    # Build content stream with each line properly positioned
+    parts = ["BT", "/F1 12 Tf", "50 750 Td"]
+    for i, line in enumerate(safe_lines):
+        if i == 0:
+            parts.append(f"({line}) Tj")
+        else:
+            parts.append(f"0 -18 Td ({line}) Tj")
+    parts.append("ET")
+    stream = "\n".join(parts)
+    stream_b = stream.encode("latin-1", errors="ignore")
+
+    # Build each PDF object as bytes
+    hdr   = b"%PDF-1.4\n"
+    obj1  = b"1 0 obj<</Type /Catalog /Pages 2 0 R>>endobj\n"
+    obj2  = b"2 0 obj<</Type /Pages /Kids [3 0 R] /Count 1>>endobj\n"
+    obj3  = b"3 0 obj<</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources<</Font<</F1 4 0 R>>>> /Contents 5 0 R>>endobj\n"
+    obj4  = b"4 0 obj<</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>endobj\n"
+    obj5h = f"5 0 obj<</Length {len(stream_b)}>>stream\n".encode("latin-1")
+    obj5f = b"\nendstream endobj\n"
+
+    # Compute exact byte offsets for xref table
+    off1 = len(hdr)
+    off2 = off1 + len(obj1)
+    off3 = off2 + len(obj2)
+    off4 = off3 + len(obj3)
+    off5 = off4 + len(obj4)
+    xref_pos = off5 + len(obj5h) + len(stream_b) + len(obj5f)
+
+    xref = (
+        f"xref\n0 6\n"
+        f"0000000000 65535 f \n"
+        f"{off1:010d} 00000 n \n"
+        f"{off2:010d} 00000 n \n"
+        f"{off3:010d} 00000 n \n"
+        f"{off4:010d} 00000 n \n"
+        f"{off5:010d} 00000 n \n"
+        f"trailer<</Size 6 /Root 1 0 R>>\nstartxref\n{xref_pos}\n%%EOF"
+    ).encode("latin-1")
+
+    return hdr + obj1 + obj2 + obj3 + obj4 + obj5h + stream_b + obj5f + xref
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -372,14 +398,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "Orden no encontrada"})
             if document != row["document"]:
                 return self._json(403, {"error": "Documento inválido para descargar comprobante"})
+            fecha = row['created_at'].replace('T', ' ')[:19]
+            total_fmt = f"${row['total']:,}".replace(',', '.')
             pdf_bytes = build_pdf_receipt([
-                "COMPROBANTE RIFA",
-                f"Orden: {row['id']}",
-                f"Fecha: {row['created_at']}",
+                "COMPROBANTE DE COMPRA",
+                "================================",
+                f"Orden N.: {row['id']}",
+                f"Fecha:   {fecha}",
                 f"Cliente: {row['first_name']} {row['last_name']}",
-                f"Rifa: {row['title']}",
-                f"Numeros: {row['numbers']}",
-                f"Total: {row['total']}",
+                f"Rifa:    {row['title']}",
+                "",
+                f"Numeros adquiridos:",
+                f"{row['numbers']}",
+                "",
+                f"TOTAL: {total_fmt} COP",
+                "================================",
+                "Gracias por su compra!",
             ])
             return self._send(200, pdf_bytes, "application/pdf")
 
