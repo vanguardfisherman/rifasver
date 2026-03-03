@@ -1,0 +1,7 @@
+providers = ["python"]
+
+[phases.install]
+cmds = []
+
+[start]
+cmd = "python app/server.py"
