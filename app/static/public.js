@@ -107,19 +107,24 @@ function fillPackPrices() {
   $('#pack100').textContent = formatCop(price * 100);
 }
 
+function updateTicker(raffle) {
+  const info = `⭐ Premio: ${raffle.main_prize} — Precio por número: ${formatCop(raffle.ticket_price)} — Mínimo: ${raffle.min_purchase} números`;
+  const t1 = document.getElementById('tickerRaffleInfo');
+  const t2 = document.getElementById('tickerRaffleInfo2');
+  if (t1) t1.textContent = info;
+  if (t2) t2.textContent = info;
+}
+
 async function loadRaffles() {
   raffles = await api('/api/raffles');
-  $('#raffleSelect').innerHTML = raffles.map(r => `<option value="${r.id}">${r.title}</option>`).join('');
   if (raffles.length) {
     currentRaffle = raffles[0];
-    $('#raffleSelect').value = currentRaffle.id;
     await onRaffleChange();
   }
 }
 
 async function onRaffleChange() {
-  const id = Number($('#raffleSelect').value);
-  currentRaffle = raffles.find(r => r.id === id);
+  const id = currentRaffle.id;
   sold = new Set((await api(`/api/raffles/${id}/numbers`)).sold);
   selected = new Set();
   currentPage = 1;
@@ -127,6 +132,7 @@ async function onRaffleChange() {
 
   $('#raffleTitle').textContent = currentRaffle.title;
   $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por número: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
+  updateTicker(currentRaffle);
   const sub = await api(`/api/raffles/${id}/subprizes`);
   $('#subprizes').innerHTML = sub.map(s => `<span class="chip">${s.name}: ${s.description}</span>`).join('');
 
@@ -257,7 +263,6 @@ _cart.style.transform = 'translateY(100%)';
 _cart.style.opacity = '0';
 _cart.style.transition = 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease';
 
-$('#raffleSelect').addEventListener('change', onRaffleChange);
 $('#search').addEventListener('input', () => { currentPage = 1; renderGrid(); });
 $('#prevPage').addEventListener('click', () => { currentPage--; renderGrid(); });
 $('#nextPage').addEventListener('click', () => { currentPage++; renderGrid(); });

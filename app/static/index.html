@@ -23,13 +23,42 @@
     </nav>
   </header>
 
+  <!-- TICKER DE AVISOS -->
+  <div class="ticker-wrap">
+    <div class="ticker-label">📣 AVISOS</div>
+    <div class="ticker-container">
+      <div class="ticker-track" id="tickerTrack">
+        <span class="ticker-item">🎟 ¡Gran Rifa en curso! Compra tus números y participa para ganar</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">🏆 Sorteo en vivo — Premios increíbles te esperan</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">💳 Proceso de compra 100% seguro y confirmado con comprobante</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">📱 Consulta tus números en la sección "Mis Entradas" en cualquier momento</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item" id="tickerRaffleInfo">⭐ Cargando información de la rifa...</span>
+        <span class="ticker-sep">✦</span>
+        <!-- Duplicado para loop continuo -->
+        <span class="ticker-item">🎟 ¡Gran Rifa en curso! Compra tus números y participa para ganar</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">🏆 Sorteo en vivo — Premios increíbles te esperan</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">💳 Proceso de compra 100% seguro y confirmado con comprobante</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item">📱 Consulta tus números en la sección "Mis Entradas" en cualquier momento</span>
+        <span class="ticker-sep">✦</span>
+        <span class="ticker-item" id="tickerRaffleInfo2">⭐ Cargando información de la rifa...</span>
+        <span class="ticker-sep">✦</span>
+      </div>
+    </div>
+  </div>
+
   <main>
     <!-- PRODUCT SPOTLIGHT -->
     <section class="panel wide spotlight product-layout">
       <div class="product-left">
         <div>
-          <h2 id="raffleTitle">Rifas activas</h2>
-          <select id="raffleSelect" aria-label="Seleccionar rifa"></select>
+          <h2 id="raffleTitle">Cargando rifa...</h2>
         </div>
         <p id="raffleInfo"></p>
         <div id="subprizes" class="subprizes" aria-label="Subpremios"></div>
