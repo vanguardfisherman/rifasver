@@ -681,5 +681,5 @@ if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", "8080"))
     print(f"Servidor en http://localhost:{port}")
-    print(f"Admin por defecto => usuario: {ADMIN_USER} | clave: {ADMIN_PASSWORD}")
+    print(f"Admin: {ADMIN_USER}")
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
