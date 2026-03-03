@@ -798,7 +798,21 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    init_db()
+    import threading, time
+
+    def init_db_with_retry():
+        for attempt in range(1, 11):
+            try:
+                init_db()
+                print("Base de datos inicializada correctamente.")
+                return
+            except Exception as e:
+                print(f"DB init intento {attempt}/10 falló: {e}")
+                time.sleep(attempt * 2)
+        print("No se pudo inicializar la base de datos tras 10 intentos.")
+
+    threading.Thread(target=init_db_with_retry, daemon=True).start()
+
     port = int(os.environ.get("PORT", "8080"))
     print(f"Servidor en http://localhost:{port}")
     print(f"Admin: {ADMIN_USER}")
