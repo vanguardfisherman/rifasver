@@ -1088,6 +1088,101 @@ ul li:hover {
   border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
+/* ========== CONTACT / SUPPORT SECTION ========== */
+.contact-panel .contact-desc {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.contact-whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #25D366;
+  color: #fff;
+  text-decoration: none;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(37, 211, 102, 0.35);
+  transition: var(--transition);
+}
+
+.contact-whatsapp-btn:hover {
+  background: #128C7E;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(37, 211, 102, 0.5);
+}
+
+.contact-email-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  transition: var(--transition);
+}
+
+.contact-email-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ========== FLOATING WHATSAPP BUTTON ========== */
+.floating-whatsapp {
+  position: fixed;
+  bottom: 90px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #25D366;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.45);
+  transition: var(--transition);
+  z-index: 98;
+  text-decoration: none;
+}
+
+.floating-whatsapp:hover {
+  background: #128C7E;
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 8px 28px rgba(37, 211, 102, 0.6);
+}
+
+@media (max-width: 640px) {
+  .floating-whatsapp {
+    bottom: 76px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .contact-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ========== ADMIN SPECIFIC ========== */
 header:not(.hero) {
   padding: 20px 32px;

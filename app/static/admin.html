@@ -72,9 +72,23 @@
       </div>
 
       <div class="admin-section">
-        <h3><span class="sub-icon">📋</span>Ordenes</h3>
-        <button id="loadOrders" type="button">Cargar ordenes</button>
-        <ul id="ordersOut" role="list" style="margin-top:12px"></ul>
+        <h3><span class="sub-icon">⚙️</span>Configuración del sitio</h3>
+        <form id="settingsForm">
+          <input name="whatsapp" placeholder="Número WhatsApp (ej: 573001234567)" aria-label="Número WhatsApp" />
+          <input name="email" placeholder="Correo de soporte (ej: soporte@tuempresa.com)" aria-label="Email de soporte" />
+          <label style="font-size:13px;color:var(--text-secondary);font-weight:600;">Avisos del ticker (uno por línea):</label>
+          <textarea id="tickerItemsInput" name="ticker_items" rows="5" placeholder="🎟 ¡Gran Rifa en curso!&#10;🏆 Premios increíbles te esperan" aria-label="Avisos del ticker"></textarea>
+          <button type="submit">Guardar configuración</button>
+        </form>
+      </div>
+
+      <div class="admin-section">
+        <h3><span class="sub-icon">📋</span>Todas las órdenes</h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+          <button id="refreshOrders" type="button">Actualizar</button>
+          <span id="ordersCount" style="font-size:13px;color:var(--text-muted)"></span>
+        </div>
+        <div id="ordersOut" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
 
       <div class="admin-section">
