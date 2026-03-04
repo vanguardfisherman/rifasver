@@ -23,6 +23,8 @@ function setState(ok){
   const msg = $('#adminMsg');
   if (ok) {
     setMsg(msg, '✓ Sesion admin activa', 'success');
+    loadOrders();
+    loadSettings();
   } else {
     msg.textContent = '';
     msg.className = '';
@@ -118,30 +120,74 @@ async function setWinners(e){
   finally { btn.disabled = false; }
 }
 
+const STATUS_LABELS = {
+  paid: { label: 'Pagado', color: 'var(--success)' },
+  paid_simulated: { label: 'Simulado', color: 'var(--accent)' },
+  pending_payment: { label: 'Pendiente', color: 'var(--warning)' },
+};
+
 async function loadOrders(){
-  const btn = $('#loadOrders');
-  btn.disabled = true;
-  btn.textContent = 'Cargando...';
+  const btn = $('#refreshOrders');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
   try{
     const rows = await api('/api/admin/orders');
+    const countEl = $('#ordersCount');
+    if (countEl) countEl.textContent = rows.length ? `${rows.length} órdenes` : '';
     if (!rows.length) {
-      $('#ordersOut').innerHTML = '<li><div class="empty-state"><span class="empty-icon">📋</span><p>No hay ordenes aun.</p></div></li>';
+      $('#ordersOut').innerHTML = '<div class="empty-state"><span class="empty-icon">📋</span><p>No hay órdenes aún.</p></div>';
       return;
     }
     $('#ordersOut').innerHTML = rows.map(r => {
       const nums = (r.numbers || '').split(',');
-      return `<li>
-        <div class="order-item">
-          <div class="order-item-header">
-            <span class="order-id">Orden #${r.id} — ${r.first_name} ${r.last_name}</span>
-            <span class="order-count">${nums.length} ${nums.length === 1 ? 'numero' : 'numeros'}</span>
+      const st = STATUS_LABELS[r.status] || { label: r.status, color: 'var(--text-muted)' };
+      const date = new Date(r.created_at).toLocaleString('es-CO', {dateStyle:'short', timeStyle:'short'});
+      return `<div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+          <div>
+            <span style="font-weight:700;color:var(--text)">Orden #${r.id}</span>
+            <span style="margin-left:10px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.2);color:${st.color}">${st.label}</span>
           </div>
-          <div class="order-numbers">${r.raffle_title} &bull; ${r.numbers}</div>
+          <span style="font-size:12px;color:var(--text-muted)">${date}</span>
         </div>
-      </li>`;
+        <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">
+          <b>${r.first_name} ${r.last_name}</b> &bull; ${r.document} &bull; ${r.email}
+        </div>
+        <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">${r.raffle_title}</div>
+        <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span style="font-size:12px;color:var(--text-muted);word-break:break-all">${nums.length} tiquete${nums.length!==1?'s':''}: ${r.numbers}</span>
+          <span style="font-weight:700;color:var(--success);font-size:14px">$ ${Number(r.total).toLocaleString('es-CO')}</span>
+        </div>
+      </div>`;
     }).join('');
-  }catch(err){ $('#ordersOut').innerHTML = `<li style="color:var(--danger-text)">${err.message}</li>`; }
-  finally { btn.disabled = false; btn.textContent = 'Cargar ordenes'; }
+  }catch(err){ $('#ordersOut').innerHTML = `<div style="color:var(--danger-text);padding:12px">${err.message}</div>`; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Actualizar'; } }
+}
+
+async function loadSettings(){
+  try {
+    const s = await api('/api/settings');
+    const form = $('#settingsForm');
+    if (!form) return;
+    form.whatsapp.value = s.whatsapp || '';
+    form.email.value = s.email || '';
+    $('#tickerItemsInput').value = (s.ticker_items || []).join('\n');
+  } catch(_) {}
+}
+
+async function saveSettings(e){
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  try {
+    const fd = new FormData(e.target);
+    const ticker_items = (fd.get('ticker_items') || '').split('\n').map(s=>s.trim()).filter(Boolean);
+    await api('/api/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ whatsapp: fd.get('whatsapp'), email: fd.get('email'), ticker_items }),
+    });
+    setMsg($('#adminMsg'), '✓ Configuración guardada', 'success');
+  } catch(err) { setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
+  finally { btn.disabled = false; }
 }
 
 async function loadAudit(){
@@ -171,7 +217,8 @@ $('#raffleSelect').addEventListener('change', onRaffleSelect);
 $('#editRaffle').addEventListener('submit', saveRaffle);
 $('#subprizesForm').addEventListener('submit', saveSubprizes);
 $('#winnersForm').addEventListener('submit', setWinners);
-$('#loadOrders').addEventListener('click', loadOrders);
+$('#refreshOrders').addEventListener('click', loadOrders);
+$('#settingsForm').addEventListener('submit', saveSettings);
 $('#loadAudit').addEventListener('click', loadAudit);
 
 setState(Boolean(token));

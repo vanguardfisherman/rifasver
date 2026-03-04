@@ -4,6 +4,7 @@ let raffles = [];
 let currentRaffle = null;
 let sold = new Set();
 let quantity = 0;
+let siteSettings = { whatsapp: '', email: '', ticker_items: [] };
 
 async function api(path, options = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
@@ -63,16 +64,39 @@ function fillPackPrices() {
   $('#pack100').textContent = formatCop(price * 100);
 }
 
-function updateTicker(raffle) {
-  const info = `⭐ Premio: ${raffle.main_prize} — Precio por tiquete: ${formatCop(raffle.ticket_price)} — Mínimo: ${raffle.min_purchase} tiquetes`;
-  const t1 = document.getElementById('tickerRaffleInfo');
-  const t2 = document.getElementById('tickerRaffleInfo2');
-  if (t1) t1.textContent = info;
-  if (t2) t2.textContent = info;
+function renderTicker(raffleInfoText) {
+  const items = [...siteSettings.ticker_items];
+  if (raffleInfoText) items.push(raffleInfoText);
+  if (!items.length) return;
+  const sep = '<span class="ticker-sep">✦</span>';
+  const makeItem = (t) => `<span class="ticker-item">${t}</span>${sep}`;
+  const half = items.map(makeItem).join('');
+  $('#tickerTrack').innerHTML = half + half; // duplicate for infinite loop
+}
+
+function applyContactSettings() {
+  const wa = siteSettings.whatsapp
+    ? `https://wa.me/${siteSettings.whatsapp.replace(/\D/g, '')}`
+    : '#';
+  const email = siteSettings.email || 'soporte@tuempresa.com';
+  const emailHref = `mailto:${email}`;
+
+  ['#contactWhatsapp', '#floatingWhatsapp'].forEach(sel => {
+    const el = $(sel);
+    if (el) el.href = wa;
+  });
+  const emailLink = $('#contactEmailLink');
+  if (emailLink) emailLink.href = emailHref;
+  const emailText = $('#contactEmailText');
+  if (emailText) emailText.textContent = email;
 }
 
 async function loadRaffles() {
-  raffles = await api('/api/raffles');
+  [raffles, siteSettings] = await Promise.all([
+    api('/api/raffles'),
+    api('/api/settings').catch(() => ({ whatsapp: '', email: '', ticker_items: [] })),
+  ]);
+  applyContactSettings();
   if (raffles.length) {
     currentRaffle = raffles[0];
     await onRaffleChange();
@@ -86,7 +110,8 @@ async function onRaffleChange() {
 
   $('#raffleTitle').textContent = currentRaffle.title;
   $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
-  updateTicker(currentRaffle);
+  const raffleInfo = `⭐ Premio: ${currentRaffle.main_prize} — Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} — Mínimo: ${currentRaffle.min_purchase} tiquetes`;
+  renderTicker(raffleInfo);
 
   const sub = await api(`/api/raffles/${id}/subprizes`);
   $('#subprizes').innerHTML = sub.map(s => `<span class="chip">${s.name}: ${s.description}</span>`).join('');

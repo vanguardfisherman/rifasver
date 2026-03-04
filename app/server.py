@@ -190,6 +190,27 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS site_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+    default_ticker = json.dumps([
+        "🎟 ¡Gran Rifa en curso! Compra tus tiquetes y participa para ganar",
+        "🏆 Sorteo en vivo — Premios increíbles te esperan",
+        "💳 Proceso de compra 100% seguro y confirmado con comprobante",
+        "📱 Consulta tus tiquetes en la sección Mis Entradas en cualquier momento",
+    ])
+    _now = datetime.utcnow().isoformat()
+    for _key, _val in [('whatsapp', ''), ('email', 'soporte@tuempresa.com'), ('ticker_items', default_ticker)]:
+        cur.execute(
+            "INSERT INTO site_settings(key, value, updated_at) VALUES(%s, %s, %s) ON CONFLICT (key) DO NOTHING",
+            (_key, _val, _now)
+        )
+
     # Migration: add wompi_reference if upgrading from older schema
     cur.execute("""
         DO $$ BEGIN
@@ -324,6 +345,16 @@ class Handler(BaseHTTPRequestHandler):
 
         conn = db()
         cur = conn.cursor()
+
+        if path == "/api/settings":
+            cur.execute("SELECT key, value FROM site_settings")
+            rows = {r['key']: r['value'] for r in cur.fetchall()}
+            conn.close()
+            return self._json(200, {
+                'whatsapp': rows.get('whatsapp', ''),
+                'email': rows.get('email', ''),
+                'ticker_items': json.loads(rows.get('ticker_items', '[]')),
+            })
 
         if path == "/api/raffles":
             cur.execute("SELECT * FROM raffles ORDER BY id DESC")
@@ -770,6 +801,25 @@ class Handler(BaseHTTPRequestHandler):
         conn = db()
         cur = conn.cursor()
         data = self._read_json()
+
+        if path == "/api/admin/settings":
+            now = datetime.utcnow().isoformat()
+            for key in ('whatsapp', 'email'):
+                if key in data:
+                    val = str(data[key])
+                    cur.execute(
+                        "INSERT INTO site_settings(key, value, updated_at) VALUES(%s,%s,%s) ON CONFLICT(key) DO UPDATE SET value=%s, updated_at=%s",
+                        (key, val, now, val, now)
+                    )
+            if 'ticker_items' in data:
+                val = json.dumps(data['ticker_items'])
+                cur.execute(
+                    "INSERT INTO site_settings(key, value, updated_at) VALUES(%s,%s,%s) ON CONFLICT(key) DO UPDATE SET value=%s, updated_at=%s",
+                    ('ticker_items', val, now, val, now)
+                )
+            conn.commit()
+            conn.close()
+            return self._json(200, {'ok': True})
 
         if path.startswith("/api/admin/raffles/"):
             raffle_id = int(path.split("/")[4])
