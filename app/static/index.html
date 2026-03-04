@@ -81,45 +81,35 @@
           <button class="pack" data-q="2" type="button">
             <span>2 Tiquetes</span>
             <b id="pack2">$0</b>
-            <em>Comprar</em>
+            <em>Seleccionar</em>
           </button>
           <button class="pack popular" data-q="5" type="button">
             <span>5 Tiquetes</span>
             <b id="pack5">$0</b>
-            <em>Comprar</em>
+            <em>Seleccionar</em>
             <label>Popular</label>
           </button>
           <button class="pack" data-q="10" type="button">
             <span>10 Tiquetes</span>
             <b id="pack10">$0</b>
-            <em>Comprar</em>
+            <em>Seleccionar</em>
           </button>
           <button class="pack" data-q="100" type="button">
             <span>100 Tiquetes</span>
             <b id="pack100">$0</b>
-            <em>Comprar</em>
+            <em>Seleccionar</em>
           </button>
         </div>
 
-        <div class="actions">
-          <input id="search" placeholder="Buscar numero (0001)" maxlength="4" aria-label="Buscar numero" />
-          <input id="jumpTo" placeholder="Ir a numero" maxlength="4" aria-label="Ir a numero" />
-          <button id="jumpBtn" type="button">Ir</button>
-        </div>
-        <div class="actions">
-          <input id="rangeFrom" placeholder="Desde" maxlength="4" aria-label="Rango desde" />
-          <input id="rangeTo" placeholder="Hasta" maxlength="4" aria-label="Rango hasta" />
-          <button id="rangeBtn" type="button">Rango</button>
-          <button id="random10" type="button">Aleatorio x10</button>
+        <div class="qty-selector">
+          <span class="qty-label">Cantidad personalizada</span>
+          <div class="qty-controls">
+            <button id="qtyMinus" type="button" class="qty-btn">−</button>
+            <input id="qtyInput" type="number" min="0" value="0" aria-label="Cantidad de tiquetes" class="qty-input" />
+            <button id="qtyPlus" type="button" class="qty-btn">+</button>
+          </div>
         </div>
 
-        <div class="grid-toolbar">
-          <button id="prevPage" type="button" aria-label="Pagina anterior">&#8592;</button>
-          <span id="pageInfo"></span>
-          <button id="nextPage" type="button" aria-label="Pagina siguiente">&#8594;</button>
-        </div>
-
-        <div id="grid" class="grid" role="grid" aria-label="Seleccionar numeros"></div>
         <p id="selInfo"></p>
       </div>
     </section>
