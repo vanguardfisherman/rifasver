@@ -1183,6 +1183,49 @@ ul li:hover {
   }
 }
 
+/* ========== DB EXPLORER TABLE ========== */
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.db-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.db-table th {
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.db-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+  color: var(--text-secondary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.db-table tbody tr:hover td {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
 /* ========== ADMIN SPECIFIC ========== */
 header:not(.hero) {
   padding: 20px 32px;
