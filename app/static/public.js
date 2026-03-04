@@ -1,14 +1,9 @@
 const $ = (s) => document.querySelector(s);
-const pad = (n) => String(n).padStart(4, '0');
 
 let raffles = [];
 let currentRaffle = null;
 let sold = new Set();
-let selected = new Set();
-
-const PAGE_SIZE = 250;
-let currentPage = 1;
-let filteredNumbers = [];
+let quantity = 0;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
@@ -21,32 +16,20 @@ function formatCop(value) {
   return `$ ${Number(value).toLocaleString('es-CO')}`;
 }
 
-function buildFilteredNumbers() {
-  const filter = $('#search').value.trim();
-  const max = Number(currentRaffle.total_numbers);
-  filteredNumbers = [];
-  for (let i = 1; i <= max; i++) {
-    const n = pad(i);
-    if (!filter || n.includes(filter)) filteredNumbers.push(n);
-  }
-  const totalPages = Math.max(1, Math.ceil(filteredNumbers.length / PAGE_SIZE));
-  if (currentPage > totalPages) currentPage = totalPages;
-}
-
 function renderProgress() {
   const total = Number(currentRaffle.total_numbers);
   const soldCount = sold.size;
+  const available = total - soldCount;
   const percent = total > 0 ? Math.round((soldCount / total) * 100) : 0;
   $('#progressBar').style.width = `${percent}%`;
-  $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} (${percent}%)`;
+  $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} — ${available.toLocaleString('es-CO')} disponibles`;
 }
 
 function syncSticky() {
-  const qty = selected.size;
-  const total = qty * Number(currentRaffle.ticket_price || 0);
-  $('#stickyInfo').textContent = `${qty} seleccionados • ${formatCop(total)}`;
+  const total = quantity * Number(currentRaffle.ticket_price || 0);
+  $('#stickyInfo').textContent = `${quantity} tiquete${quantity !== 1 ? 's' : ''} • ${formatCop(total)}`;
   const cart = $('#stickyCart');
-  if (qty > 0) {
+  if (quantity > 0) {
     cart.style.transform = 'translateY(0)';
     cart.style.opacity = '1';
   } else {
@@ -55,48 +38,21 @@ function syncSticky() {
   }
 }
 
-function renderGrid() {
-  buildFilteredNumbers();
-  const totalPages = Math.max(1, Math.ceil(filteredNumbers.length / PAGE_SIZE));
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-  const pageNumbers = filteredNumbers.slice(start, end);
-
-  const wrap = $('#grid');
-  wrap.innerHTML = '';
-  const fragment = document.createDocumentFragment();
-
-  for (let idx = 0; idx < pageNumbers.length; idx++) {
-    const n = pageNumbers[idx];
-    const b = document.createElement('button');
-    b.className = 'num';
-    b.textContent = n;
-    b.style.opacity = '0';
-    b.style.transform = 'scale(0.85)';
-    b.style.transition = `opacity 0.25s ease ${idx * 0.003}s, transform 0.25s ease ${idx * 0.003}s, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease`;
-    requestAnimationFrame(() => {
-      b.style.opacity = '1';
-      b.style.transform = 'scale(1)';
-    });
-    if (sold.has(n)) {
-      b.classList.add('sold');
-      b.disabled = true;
-    }
-    if (selected.has(n)) b.classList.add('selected');
-    b.onclick = () => {
-      selected.has(n) ? selected.delete(n) : selected.add(n);
-      renderGrid();
-    };
-    fragment.appendChild(b);
+function updateSelInfo() {
+  const total = quantity * Number(currentRaffle.ticket_price || 0);
+  if (quantity > 0) {
+    $('#selInfo').textContent = `${quantity} tiquete${quantity !== 1 ? 's' : ''} • Total: ${formatCop(total)}`;
+  } else {
+    $('#selInfo').textContent = '';
   }
-
-  wrap.appendChild(fragment);
-  $('#pageInfo').textContent = `Página ${currentPage} de ${totalPages}`;
-  $('#prevPage').disabled = currentPage <= 1;
-  $('#nextPage').disabled = currentPage >= totalPages;
-  $('#selInfo').textContent = `Seleccionados: ${selected.size} • Total: ${formatCop(selected.size * Number(currentRaffle.ticket_price))}`;
-  renderProgress();
   syncSticky();
+}
+
+function setQty(n) {
+  const available = Number(currentRaffle.total_numbers) - sold.size;
+  quantity = Math.max(0, Math.min(n, available));
+  $('#qtyInput').value = quantity;
+  updateSelInfo();
 }
 
 function fillPackPrices() {
@@ -108,7 +64,7 @@ function fillPackPrices() {
 }
 
 function updateTicker(raffle) {
-  const info = `⭐ Premio: ${raffle.main_prize} — Precio por número: ${formatCop(raffle.ticket_price)} — Mínimo: ${raffle.min_purchase} números`;
+  const info = `⭐ Premio: ${raffle.main_prize} — Precio por tiquete: ${formatCop(raffle.ticket_price)} — Mínimo: ${raffle.min_purchase} tiquetes`;
   const t1 = document.getElementById('tickerRaffleInfo');
   const t2 = document.getElementById('tickerRaffleInfo2');
   if (t1) t1.textContent = info;
@@ -126,13 +82,12 @@ async function loadRaffles() {
 async function onRaffleChange() {
   const id = currentRaffle.id;
   sold = new Set((await api(`/api/raffles/${id}/numbers`)).sold);
-  selected = new Set();
-  currentPage = 1;
-  $('#search').value = '';
+  quantity = 0;
 
   $('#raffleTitle').textContent = currentRaffle.title;
-  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por número: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
+  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
   updateTicker(currentRaffle);
+
   const sub = await api(`/api/raffles/${id}/subprizes`);
   $('#subprizes').innerHTML = sub.map(s => `<span class="chip">${s.name}: ${s.description}</span>`).join('');
 
@@ -140,42 +95,10 @@ async function onRaffleChange() {
   $('#raffleImage').src = image;
 
   fillPackPrices();
-  renderGrid();
+  renderProgress();
+  $('#qtyInput').value = 0;
+  updateSelInfo();
   await renderWinners();
-}
-
-function selectRandom(qty) {
-  const available = [];
-  for (let i = 1; i <= Number(currentRaffle.total_numbers); i++) {
-    const n = pad(i);
-    if (!sold.has(n)) available.push(n);
-  }
-  selected = new Set();
-  while (selected.size < qty && available.length) {
-    const idx = Math.floor(Math.random() * available.length);
-    selected.add(available[idx]);
-    available.splice(idx, 1);
-  }
-  renderGrid();
-}
-
-function jumpToNumber() {
-  const value = $('#jumpTo').value.trim();
-  if (!value) return;
-  $('#search').value = value;
-  currentPage = 1;
-  renderGrid();
-}
-
-function selectRange() {
-  const from = Number($('#rangeFrom').value);
-  const to = Number($('#rangeTo').value);
-  if (!from || !to || to < from) return;
-  for (let i = from; i <= to; i++) {
-    const n = pad(i);
-    if (!sold.has(n)) selected.add(n);
-  }
-  renderGrid();
 }
 
 async function downloadReceipt(orderId, customerDoc) {
@@ -210,8 +133,8 @@ async function buy(e) {
   e.preventDefault();
   const msgEl = $('#msg');
   const btn = e.target.querySelector('button[type="submit"]');
-  if (!selected.size) {
-    setMsg(msgEl, '✗ Selecciona al menos un número antes de continuar', 'error');
+  if (!quantity) {
+    setMsg(msgEl, '✗ Selecciona al menos un tiquete antes de continuar', 'error');
     return;
   }
   btn.disabled = true;
@@ -220,13 +143,13 @@ async function buy(e) {
     const customer = Object.fromEntries(new FormData(e.target).entries());
     const init = await api('/api/payments/init', {
       method: 'POST',
-      body: JSON.stringify({ raffle_id: currentRaffle.id, numbers: [...selected], customer }),
+      body: JSON.stringify({ raffle_id: currentRaffle.id, quantity, customer }),
     });
 
     if (init.mode === 'simulated') {
-      // Modo desarrollo: sin Wompi configurado
       try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}
-      setMsg(msgEl, `✓ Compra exitosa. Orden #${init.order_id} — Comprobante descargado.`, 'success');
+      const numsStr = init.numbers ? ` Números asignados: ${init.numbers.join(', ')}` : '';
+      setMsg(msgEl, `✓ Compra exitosa. Orden #${init.order_id} — Comprobante descargado.${numsStr}`, 'success');
       await onRaffleChange();
       e.target.reset();
       return;
@@ -260,7 +183,7 @@ async function buy(e) {
         e.target.reset();
       } else {
         const st = transaction?.status || 'CANCELADO';
-        setMsg(msgEl, `✗ Pago no completado (${st}). Tus números quedaron liberados.`, 'error');
+        setMsg(msgEl, `✗ Pago no completado (${st}). Tus tiquetes quedaron liberados.`, 'error');
         await onRaffleChange();
       }
     });
@@ -287,7 +210,7 @@ async function lookup() {
         <div class="order-item">
           <div class="order-item-header">
             <span class="order-id">Orden #${o.order_id}</span>
-            <span class="order-count">${nums.length} ${nums.length === 1 ? 'numero' : 'numeros'}</span>
+            <span class="order-count">${nums.length} ${nums.length === 1 ? 'tiquete' : 'tiquetes'}</span>
           </div>
           <div class="order-numbers">${o.numbers}</div>
         </div>
@@ -318,22 +241,16 @@ _cart.style.transform = 'translateY(100%)';
 _cart.style.opacity = '0';
 _cart.style.transition = 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease';
 
-$('#search').addEventListener('input', () => { currentPage = 1; renderGrid(); });
-$('#prevPage').addEventListener('click', () => { currentPage--; renderGrid(); });
-$('#nextPage').addEventListener('click', () => { currentPage++; renderGrid(); });
-$('#jumpBtn').addEventListener('click', jumpToNumber);
-$('#rangeBtn').addEventListener('click', selectRange);
-$('#random10').addEventListener('click', () => selectRandom(10));
-
+// Pack buttons — set quantity
 document.querySelectorAll('.pack').forEach(btn => btn.addEventListener('click', () => {
-  const qty = Number(btn.dataset.q);
-  selected = new Set();
-  for (let i = 1; i <= Number(currentRaffle.total_numbers) && selected.size < qty; i++) {
-    const n = pad(i);
-    if (!sold.has(n)) selected.add(n);
-  }
-  renderGrid();
+  setQty(Number(btn.dataset.q));
 }));
+
+// Quantity controls
+$('#qtyMinus').addEventListener('click', () => setQty(quantity - 1));
+$('#qtyPlus').addEventListener('click', () => setQty(quantity + 1));
+$('#qtyInput').addEventListener('change', () => setQty(Number($('#qtyInput').value)));
+$('#qtyInput').addEventListener('input', () => setQty(Number($('#qtyInput').value)));
 
 $('#stickyCheckout').addEventListener('click', () => {
   document.querySelector('#checkout').scrollIntoView({behavior: 'smooth', block: 'start'});

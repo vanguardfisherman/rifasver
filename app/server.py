@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import random
 import secrets
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -562,7 +563,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/payments/init":
             raffle_id = int(data["raffle_id"])
-            numbers = [str(n).zfill(4) for n in data["numbers"]]
+            quantity = int(data["quantity"])
             cur.execute("SELECT * FROM raffles WHERE id=%s", (raffle_id,))
             raffle = cur.fetchone()
             if not raffle:
@@ -571,20 +572,20 @@ class Handler(BaseHTTPRequestHandler):
             if raffle["status"] != "active":
                 conn.close()
                 return self._json(400, {"error": "Rifa no está activa"})
-            if len(numbers) < raffle["min_purchase"]:
+            if quantity < raffle["min_purchase"]:
                 conn.close()
-                return self._json(400, {"error": f"Mínimo {raffle['min_purchase']} números"})
-            for n in numbers:
-                if int(n) < 1 or int(n) > raffle["total_numbers"]:
-                    conn.close()
-                    return self._json(400, {"error": f"Número fuera de rango: {n}"})
+                return self._json(400, {"error": f"Mínimo {raffle['min_purchase']} tiquetes"})
+            if quantity < 1:
+                conn.close()
+                return self._json(400, {"error": "Cantidad inválida"})
 
             cur.execute("SELECT number FROM order_numbers WHERE raffle_id=%s", (raffle_id,))
             sold_set = {r["number"] for r in cur.fetchall()}
-            conflicts = [n for n in numbers if n in sold_set]
-            if conflicts:
+            available = [str(i).zfill(4) for i in range(1, raffle["total_numbers"] + 1) if str(i).zfill(4) not in sold_set]
+            if len(available) < quantity:
                 conn.close()
-                return self._json(409, {"error": "Números no disponibles", "numbers": conflicts})
+                return self._json(400, {"error": f"No hay suficientes tiquetes disponibles. Solo quedan {len(available)}"})
+            numbers = random.sample(available, quantity)
 
             customer_data = data["customer"]
             cur.execute(
