@@ -25,6 +25,7 @@ function setState(ok){
     setMsg(msg, '✓ Sesion admin activa', 'success');
     loadOrders();
     loadSettings();
+    loadDbTables();
   } else {
     msg.textContent = '';
     msg.className = '';
@@ -212,6 +213,155 @@ async function loadAudit(){
   finally { btn.disabled = false; btn.textContent = 'Cargar auditoria'; }
 }
 
+// ===== DATABASE EXPLORER =====
+let dbCurrentTable = '';
+let dbCurrentPage = 1;
+let dbCurrentRows = [];
+const DB_LIMIT = 50;
+
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildWhere(row) {
+  if (row.id !== undefined && row.id !== null) {
+    return isNaN(Number(row.id)) ? `id = '${row.id}'` : `id = ${row.id}`;
+  }
+  return Object.entries(row)
+    .map(([k, v]) => v === null ? `${k} IS NULL` : `${k} = '${String(v).replace(/'/g, "''")}'`)
+    .join(' AND ');
+}
+
+async function loadDbTables() {
+  try {
+    const tables = await api('/api/admin/db/tables');
+    const sel = $('#dbTableSelect');
+    sel.innerHTML = '<option value="">— Selecciona una tabla —</option>';
+    tables.forEach(t => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+  } catch(_) {}
+}
+
+async function loadDbTable(table, page = 1) {
+  if (!table) return;
+  dbCurrentTable = table;
+  dbCurrentPage = page;
+  const btn = $('#dbLoadTableBtn');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  try {
+    const data = await api(`/api/admin/db/table/${encodeURIComponent(table)}?page=${page}&limit=${DB_LIMIT}`);
+    dbCurrentRows = data.rows;
+    renderDbTable(data);
+    const pager = $('#dbTablePager');
+    pager.style.display = 'flex';
+    const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
+    $('#dbPageInfo').textContent = `Página ${data.page} de ${totalPages} — ${data.total.toLocaleString('es-CO')} filas`;
+    $('#dbPrevPage').disabled = data.page <= 1;
+    $('#dbNextPage').disabled = data.page >= totalPages;
+  } catch(err) {
+    $('#dbTableOut').innerHTML = `<div style="color:var(--danger-text);padding:12px">${esc(err.message)}</div>`;
+  } finally { btn.disabled = false; btn.textContent = 'Ver tabla'; }
+}
+
+function renderDbTable(data) {
+  if (!data.rows.length) {
+    $('#dbTableOut').innerHTML = '<div class="empty-state"><span class="empty-icon">📋</span><p>Tabla vacía.</p></div>';
+    return;
+  }
+  const cols = data.columns;
+  let html = '<table class="db-table"><thead><tr><th>Acciones</th>';
+  cols.forEach(c => { html += `<th>${esc(c)}</th>`; });
+  html += '</tr></thead><tbody>';
+  data.rows.forEach((row, idx) => {
+    html += `<tr><td style="white-space:nowrap">
+      <button type="button" class="db-edit-btn" data-idx="${idx}" style="padding:3px 8px;font-size:11px;margin-right:4px">Editar</button>
+      <button type="button" class="db-delete-btn" data-idx="${idx}" style="padding:3px 8px;font-size:11px;background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:none">Eliminar</button>
+    </td>`;
+    cols.forEach(c => {
+      const v = row[c];
+      const display = v === null ? '<em style="color:var(--text-muted)">NULL</em>' : esc(String(v).length > 80 ? String(v).slice(0, 80) + '…' : String(v));
+      html += `<td>${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  $('#dbTableOut').innerHTML = html;
+}
+
+function dbEditRow(idx) {
+  const row = dbCurrentRows[idx];
+  const table = dbCurrentTable;
+  const sets = Object.entries(row)
+    .filter(([k]) => k !== 'id')
+    .map(([k, v]) => v === null ? `  ${k} = NULL` : `  ${k} = '${String(v).replace(/'/g, "''")}'`)
+    .join(',\n');
+  const where = buildWhere(row);
+  $('#dbQueryInput').value = `UPDATE "${table}"\nSET\n${sets}\nWHERE ${where};`;
+  $('#dbQueryMsg').textContent = '';
+  $('#dbQueryOut').innerHTML = '';
+  $('#dbQueryInput').focus();
+  $('#dbQueryInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function dbDeleteRow(idx) {
+  const row = dbCurrentRows[idx];
+  const table = dbCurrentTable;
+  const where = buildWhere(row);
+  if (confirm(`¿Eliminar la fila donde ${where}?\nEsta acción no se puede deshacer.`)) {
+    $('#dbQueryInput').value = `DELETE FROM "${table}" WHERE ${where};`;
+    runDbQuery();
+  }
+}
+
+$('#dbTableOut').addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.db-edit-btn');
+  const delBtn = e.target.closest('.db-delete-btn');
+  if (editBtn) dbEditRow(Number(editBtn.dataset.idx));
+  if (delBtn) dbDeleteRow(Number(delBtn.dataset.idx));
+});
+
+async function runDbQuery() {
+  const sql = $('#dbQueryInput').value.trim();
+  if (!sql) return;
+  const btn = $('#dbRunQueryBtn');
+  const msgEl = $('#dbQueryMsg');
+  btn.disabled = true; btn.textContent = 'Ejecutando...';
+  msgEl.textContent = ''; msgEl.style.color = 'var(--text-muted)';
+  try {
+    const result = await api('/api/admin/db/query', { method: 'POST', body: JSON.stringify({ sql }) });
+    if (result.type === 'select') {
+      if (!result.rows.length) {
+        $('#dbQueryOut').innerHTML = '<div style="color:var(--text-muted);padding:8px 0">Sin resultados.</div>';
+        msgEl.textContent = '0 filas';
+      } else {
+        const cols = result.columns;
+        let html = '<table class="db-table"><thead><tr>';
+        cols.forEach(c => { html += `<th>${esc(c)}</th>`; });
+        html += '</tr></thead><tbody>';
+        result.rows.forEach(row => {
+          html += '<tr>';
+          cols.forEach(c => {
+            const v = row[c];
+            const display = v === null ? '<em style="color:var(--text-muted)">NULL</em>' : esc(String(v));
+            html += `<td>${display}</td>`;
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+        $('#dbQueryOut').innerHTML = html;
+        msgEl.textContent = `${result.rows.length} fila(s)`;
+      }
+    } else {
+      $('#dbQueryOut').innerHTML = '';
+      msgEl.textContent = `✓ ${result.rowcount} fila(s) afectada(s)`;
+      msgEl.style.color = 'var(--success)';
+      if (dbCurrentTable) loadDbTable(dbCurrentTable, dbCurrentPage);
+    }
+  } catch(err) {
+    $('#dbQueryOut').innerHTML = `<div style="color:var(--danger-text);padding:8px 0">${esc(err.message)}</div>`;
+  } finally { btn.disabled = false; btn.textContent = '▶ Ejecutar'; }
+}
+
 $('#adminLogin').addEventListener('submit', login);
 $('#raffleSelect').addEventListener('change', onRaffleSelect);
 $('#editRaffle').addEventListener('submit', saveRaffle);
@@ -220,6 +370,12 @@ $('#winnersForm').addEventListener('submit', setWinners);
 $('#refreshOrders').addEventListener('click', loadOrders);
 $('#settingsForm').addEventListener('submit', saveSettings);
 $('#loadAudit').addEventListener('click', loadAudit);
+$('#dbLoadTableBtn').addEventListener('click', () => loadDbTable($('#dbTableSelect').value));
+$('#dbPrevPage').addEventListener('click', () => loadDbTable(dbCurrentTable, dbCurrentPage - 1));
+$('#dbNextPage').addEventListener('click', () => loadDbTable(dbCurrentTable, dbCurrentPage + 1));
+$('#dbRunQueryBtn').addEventListener('click', runDbQuery);
+$('#dbClearQueryBtn').addEventListener('click', () => { $('#dbQueryInput').value = ''; $('#dbQueryOut').innerHTML = ''; $('#dbQueryMsg').textContent = ''; });
+$('#dbQueryInput').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runDbQuery(); });
 
 setState(Boolean(token));
 if (token) loadRaffles();

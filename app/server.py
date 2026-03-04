@@ -513,6 +513,41 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             return self._json(200, rows)
 
+        if path == "/api/admin/db/tables":
+            if not self._require_admin():
+                conn.close()
+                return self._json(401, {"error": "No autorizado"})
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name")
+            tables = [r['table_name'] for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, tables)
+
+        if path.startswith("/api/admin/db/table/"):
+            if not self._require_admin():
+                conn.close()
+                return self._json(401, {"error": "No autorizado"})
+            table = path[len("/api/admin/db/table/"):]
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s", (table,))
+            if not cur.fetchone():
+                conn.close()
+                return self._json(404, {"error": "Tabla no existe"})
+            page = max(1, int(query.get("page", ["1"])[0]))
+            limit = min(int(query.get("limit", ["50"])[0]), 200)
+            offset = (page - 1) * limit
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name=%s AND table_schema='public' ORDER BY ordinal_position", (table,))
+            columns = [r['column_name'] for r in cur.fetchall()]
+            cur.execute(f'SELECT COUNT(*) AS c FROM "{table}"')
+            total = cur.fetchone()['c']
+            cur.execute(f'SELECT * FROM "{table}" ORDER BY 1 DESC LIMIT %s OFFSET %s', (limit, offset))
+            rows = []
+            for r in cur.fetchall():
+                row = {}
+                for k, v in dict(r).items():
+                    row[k] = str(v) if v is not None else None
+                rows.append(row)
+            conn.close()
+            return self._json(200, {"columns": columns, "rows": rows, "total": total, "page": page, "limit": limit})
+
         conn.close()
         return self._json(404, {"error": "Not found"})
 
@@ -801,6 +836,37 @@ class Handler(BaseHTTPRequestHandler):
         conn = db()
         cur = conn.cursor()
         data = self._read_json()
+
+        if path == "/api/admin/db/query":
+            if not self._require_admin():
+                conn.close()
+                return self._json(401, {"error": "No autorizado"})
+            sql = (data.get("sql") or "").strip()
+            if not sql:
+                conn.close()
+                return self._json(400, {"error": "SQL vacío"})
+            try:
+                cur.execute(sql)
+                if cur.description:
+                    cols = [d.name for d in cur.description]
+                    rows = []
+                    for r in cur.fetchall():
+                        row = {}
+                        for k, v in dict(r).items():
+                            row[k] = str(v) if v is not None else None
+                        rows.append(row)
+                    conn.commit()
+                    conn.close()
+                    return self._json(200, {"type": "select", "columns": cols, "rows": rows})
+                else:
+                    cnt = cur.rowcount
+                    conn.commit()
+                    conn.close()
+                    return self._json(200, {"type": "modify", "rowcount": cnt})
+            except Exception as exc:
+                conn.rollback()
+                conn.close()
+                return self._json(400, {"error": str(exc)})
 
         if path == "/api/admin/settings":
             now = datetime.utcnow().isoformat()

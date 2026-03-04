@@ -96,6 +96,34 @@
         <button id="loadAudit" type="button">Cargar auditoria</button>
         <ul id="auditOut" role="list" style="margin-top:12px"></ul>
       </div>
+
+      <div class="admin-section">
+        <h3><span class="sub-icon">🗄️</span>Base de datos</h3>
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <select id="dbTableSelect" style="flex:1;min-width:160px" aria-label="Seleccionar tabla">
+            <option value="">— Selecciona una tabla —</option>
+          </select>
+          <button id="dbLoadTableBtn" type="button">Ver tabla</button>
+        </div>
+
+        <div id="dbTablePager" style="display:none;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <button id="dbPrevPage" type="button">← Anterior</button>
+          <span id="dbPageInfo" style="font-size:13px;color:var(--text-muted)"></span>
+          <button id="dbNextPage" type="button">Siguiente →</button>
+        </div>
+
+        <div id="dbTableOut" style="overflow-x:auto;margin-bottom:20px;max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
+
+        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em;">Editor SQL</label>
+        <textarea id="dbQueryInput" rows="5" placeholder="SELECT * FROM orders LIMIT 10;&#10;&#10;-- INSERT, UPDATE, DELETE también son válidos" style="font-family:'Courier New',monospace;font-size:13px;margin-top:8px;" aria-label="Editor SQL"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+          <button id="dbRunQueryBtn" type="button">▶ Ejecutar</button>
+          <button id="dbClearQueryBtn" type="button" style="background:var(--surface-raised);color:var(--text-secondary);box-shadow:none;border:1px solid var(--border);">Limpiar</button>
+          <span id="dbQueryMsg" style="font-size:13px;color:var(--text-muted);flex:1;"></span>
+        </div>
+        <div id="dbQueryOut" style="overflow-x:auto;margin-top:12px;max-height:360px;overflow-y:auto;border-radius:var(--radius-sm);"></div>
+      </div>
     </section>
   </main>
 
