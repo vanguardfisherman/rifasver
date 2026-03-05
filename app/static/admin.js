@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 
-let token = localStorage.getItem('admin_token') || '';
+let token = '';
 let raffles = [];
 let currentRaffle = null;
 
@@ -41,7 +41,6 @@ async function login(e){
     const creds = Object.fromEntries(new FormData(e.target).entries());
     const out = await api('/api/admin/login', {method:'POST', body: JSON.stringify(creds), headers:{}});
     token = out.token;
-    localStorage.setItem('admin_token', token);
     setState(true);
     await loadRaffles();
   }catch(err){
@@ -377,5 +376,16 @@ $('#dbRunQueryBtn').addEventListener('click', runDbQuery);
 $('#dbClearQueryBtn').addEventListener('click', () => { $('#dbQueryInput').value = ''; $('#dbQueryOut').innerHTML = ''; $('#dbQueryMsg').textContent = ''; });
 $('#dbQueryInput').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runDbQuery(); });
 
-setState(Boolean(token));
-if (token) loadRaffles();
+function logout() {
+  token = '';
+  raffles = [];
+  currentRaffle = null;
+  setState(false);
+  $('#adminLogin').reset();
+  $('#adminMsg').textContent = '';
+  $('#adminMsg').className = '';
+}
+
+$('#logoutBtn').addEventListener('click', logout);
+
+setState(false);

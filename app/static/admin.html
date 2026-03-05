@@ -35,7 +35,10 @@
 
     <!-- ADMIN AREA -->
     <section id="adminArea" class="panel hidden">
-      <h2><span class="section-icon blue">🎟</span>Rifa seleccionada</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <h2 style="margin-bottom:0;border-bottom:none;padding-bottom:0;"><span class="section-icon blue">🎟</span>Rifa seleccionada</h2>
+        <button id="logoutBtn" type="button" style="background:var(--surface-raised);color:var(--danger-text);border:1px solid rgba(239,68,68,0.3);box-shadow:none;padding:8px 16px;font-size:13px;">🔒 Cerrar sesión</button>
+      </div>
       <select id="raffleSelect" aria-label="Seleccionar rifa"></select>
 
       <div class="admin-section">
