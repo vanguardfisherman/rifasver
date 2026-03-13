@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Compra números para rifas online de forma rápida y segura." />
+    <meta name="raffle-date" content="2026-12-31T20:00:00-05:00" />
+    <meta name="api-base" content="" />
     <title>Rifas Online 🎰</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -38,8 +41,8 @@
         </div>
         <div class="prize-hero">
           <div class="prize-label">GRAN PREMIO</div>
-          <div class="prize-amount">$4.000.000</div>
-          <div class="prize-sub">COP</div>
+          <div id="prizeAmount" class="prize-amount">$4.000.000</div>
+          <div id="prizeSub" class="prize-sub">COP</div>
         </div>
       </div>
 
@@ -104,7 +107,7 @@
             <span id="selCount">0 seleccionados</span>
             <span id="selTotal" class="sel-price">$0</span>
           </div>
-          <button class="btn-checkout" onclick="document.getElementById('checkoutForm').scrollIntoView({behavior:'smooth'})">
+          <button id="goCheckout" class="btn-checkout">
             Ir a pagar →
           </button>
         </div>
@@ -141,7 +144,7 @@
       </section>
 
       <!-- ADMIN -->
-      <section class="card card-admin">
+      <section id="adminCard" class="card card-admin" hidden>
         <h2>🔐 Panel Admin (demo)</h2>
         <div class="tools">
           <input id="mainWinner" placeholder="Número ganador principal" maxlength="4" />

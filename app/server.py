@@ -25,6 +25,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 WOMPI_PUBLIC_KEY = os.environ.get("WOMPI_PUBLIC_KEY", "")
 WOMPI_INTEGRITY_SECRET = os.environ.get("WOMPI_INTEGRITY_SECRET", "")
 WOMPI_EVENTS_SECRET = os.environ.get("WOMPI_EVENTS_SECRET", "")
+CORS_ALLOW_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
 
 ADMIN_TOKENS = {}
 RATE_LIMIT_BY_IP = {}
@@ -272,9 +273,23 @@ def is_rate_limited(client_ip: str) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _cors_origin(self):
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return "*"
+        if "*" in CORS_ALLOW_ORIGINS or origin in CORS_ALLOW_ORIGINS:
+            return origin
+        return ""
+
     def _send(self, status=200, body="", ctype="application/json"):
         data = body.encode() if isinstance(body, str) else body
         self.send_response(status)
+        allowed_origin = self._cors_origin()
+        if allowed_origin:
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -338,6 +353,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/"):
             return self.api_patch(path)
         self._send(404, "Not found", "text/plain")
+
+    def do_OPTIONS(self):
+        self._send(204, b"", "text/plain")
 
     def api_get(self, path, query):
         if path == "/api/health":

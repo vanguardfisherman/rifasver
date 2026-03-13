@@ -323,6 +323,12 @@ button:hover { background: #2176f0; }
   margin-bottom: 14px;
   min-height: 44px;
 }
+.summary-numbers {
+  margin: 8px 0 10px;
+  color: #aabce0;
+  word-break: break-word;
+}
+.summary-total { color: var(--gold); }
 
 .btn-pay {
   width: 100%;
@@ -351,6 +357,9 @@ button:hover { background: #2176f0; }
   padding: 10px 14px;
   font-size: 13px;
 }
+.lookup-top { color: var(--text); margin-bottom: 4px; }
+.lookup-amount { color: var(--gold); font-weight: 700; }
+.lookup-numbers { color: var(--muted); word-break: break-word; }
 
 /* ── WINNERS ── */
 .winner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap: 12px; margin-top: 12px; }

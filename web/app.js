@@ -1,234 +1,594 @@
-const TOTAL_NUMBERS = 200;
-const MIN_PURCHASE = 5;
-const PRICE = 1000;
-// Fecha del sorteo: cambia esto según necesites
-const RAFFLE_DATE = new Date("2025-12-31T20:00:00");
+const API_BASE = (
+  document.querySelector('meta[name="api-base"]')?.getAttribute("content")
+  || window.RIFAS_API_BASE
+  || ""
+).trim().replace(/\/$/, "");
 
-const pad = (n) => String(n).padStart(4, "0");
 const soldKey = "rifa_sold_numbers";
 const ordersKey = "rifa_orders";
 const winnersKey = "rifa_winners";
 
-const soldNumbers = new Set(JSON.parse(localStorage.getItem(soldKey) || "[]"));
-const orders = JSON.parse(localStorage.getItem(ordersKey) || "[]");
-const selected = new Set();
-
 const grid = document.getElementById("numberGrid");
+const searchInput = document.getElementById("searchNumber");
+const clearSelectionBtn = document.getElementById("clearSelection");
+const checkoutForm = document.getElementById("checkoutForm");
+const checkoutMsg = document.getElementById("checkoutMsg");
+const lookupInput = document.getElementById("lookup");
+const lookupBtn = document.getElementById("lookupBtn");
+const lookupResults = document.getElementById("lookupResults");
+const winnersWrap = document.getElementById("winners");
+const goCheckoutBtn = document.getElementById("goCheckout");
+const adminCard = document.getElementById("adminCard");
+const setWinnersBtn = document.getElementById("setWinners");
+const mainWinnerInput = document.getElementById("mainWinner");
+const subWinnerInput = document.getElementById("subWinner");
+const prizeAmount = document.getElementById("prizeAmount");
+const prizeSub = document.getElementById("prizeSub");
 
-// ── COUNTDOWN ──
+let currentRaffle = null;
+let soldNumbers = new Set();
+const selected = new Set();
+let adminToken = sessionStorage.getItem("rifa_admin_token") || "";
+
+const RAFFLE_DATE = getRaffleDate();
+
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
+
+async function request(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+
+  const response = await fetch(apiUrl(path), {
+    method: options.method || "GET",
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  let data = null;
+
+  if (contentType.includes("application/json")) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    data = text ? { error: text } : {};
+  }
+
+  if (!response.ok) {
+    const err = new Error(data?.error || `Error HTTP ${response.status}`);
+    err.status = response.status;
+    err.payload = data;
+    throw err;
+  }
+
+  return data;
+}
+
+function setCheckoutMessage(text, type = "success") {
+  if (!checkoutMsg) return;
+  checkoutMsg.textContent = text;
+  checkoutMsg.style.color = type === "error" ? "var(--red)" : "var(--green)";
+}
+
+function clearLegacyLocalState() {
+  [soldKey, ordersKey, winnersKey].forEach((key) => localStorage.removeItem(key));
+}
+
+function padNumber(n) {
+  return String(n).padStart(4, "0");
+}
+
+function toDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeWinner(value) {
+  const digits = toDigits(value).slice(-4);
+  if (!digits) return "";
+  return padNumber(digits);
+}
+
+function formatMoney(value) {
+  return value.toLocaleString("es-CO");
+}
+
+function getConfiguredRaffleDate() {
+  const configured = document.querySelector('meta[name="raffle-date"]')?.getAttribute("content")?.trim();
+  if (!configured) return null;
+  const parsed = new Date(configured);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getFallbackRaffleDate() {
+  const fallback = new Date();
+  fallback.setDate(fallback.getDate() + 15);
+  fallback.setHours(20, 0, 0, 0);
+  return fallback;
+}
+
+function getRaffleDate() {
+  const configured = getConfiguredRaffleDate();
+  if (configured && configured > new Date()) return configured;
+  return getFallbackRaffleDate();
+}
+
 function updateCountdown() {
-  const now = new Date();
-  const diff = RAFFLE_DATE - now;
+  const diff = RAFFLE_DATE - new Date();
   if (diff <= 0) {
-    ["cd-days","cd-hours","cd-mins","cd-secs"].forEach(id => document.getElementById(id).textContent = "00");
+    ["cd-days", "cd-hours", "cd-mins", "cd-secs"].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = "00";
+    });
     return;
   }
+
   const d = Math.floor(diff / 86400000);
   const h = Math.floor((diff % 86400000) / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   const s = Math.floor((diff % 60000) / 1000);
-  document.getElementById("cd-days").textContent  = String(d).padStart(2,"0");
-  document.getElementById("cd-hours").textContent = String(h).padStart(2,"0");
-  document.getElementById("cd-mins").textContent  = String(m).padStart(2,"0");
-  document.getElementById("cd-secs").textContent  = String(s).padStart(2,"0");
-}
-updateCountdown();
-setInterval(updateCountdown, 1000);
 
-// ── PROGRESO ──
+  document.getElementById("cd-days").textContent = String(d).padStart(2, "0");
+  document.getElementById("cd-hours").textContent = String(h).padStart(2, "0");
+  document.getElementById("cd-mins").textContent = String(m).padStart(2, "0");
+  document.getElementById("cd-secs").textContent = String(s).padStart(2, "0");
+}
+
 function updateProgress() {
+  if (!currentRaffle) return;
+  const total = Number(currentRaffle.total_numbers || 0);
   const sold = soldNumbers.size;
-  const pct = Math.round((sold / TOTAL_NUMBERS) * 100);
-  document.getElementById("prog-text").textContent = `${sold} / ${TOTAL_NUMBERS}`;
-  document.getElementById("prog-fill").style.width = pct + "%";
+  const pct = total > 0 ? Math.round((sold / total) * 100) : 0;
+
+  document.getElementById("prog-text").textContent = `${sold} / ${total}`;
+  document.getElementById("prog-fill").style.width = `${pct}%`;
   document.getElementById("prog-pct").textContent = `${pct}% completado`;
 }
-updateProgress();
 
-// ── GRID ──
+function updateHeaderFromRaffle() {
+  if (!currentRaffle) return;
+
+  if (prizeAmount) {
+    const raw = String(currentRaffle.main_prize || "");
+    const amountOnly = raw.replace(/\s*COP\s*/i, "").trim();
+    prizeAmount.textContent = amountOnly || `$${formatMoney(Number(currentRaffle.ticket_price || 0) * 100)}`;
+  }
+
+  if (prizeSub) {
+    prizeSub.textContent = "COP";
+  }
+}
+
 function renderGrid(filter = "") {
-  grid.innerHTML = "";
-  for (let i = 1; i <= TOTAL_NUMBERS; i++) {
-    const n = pad(i);
-    if (filter && !n.includes(filter)) continue;
+  if (!grid || !currentRaffle) return;
+  const normalizedFilter = toDigits(filter).slice(0, 4);
+  const total = Number(currentRaffle.total_numbers || 0);
+  grid.replaceChildren();
+
+  for (let i = 1; i <= total; i += 1) {
+    const n = padNumber(i);
+    if (normalizedFilter && !n.includes(normalizedFilter)) continue;
+
     const btn = document.createElement("button");
     btn.className = "num";
+    btn.type = "button";
     btn.textContent = n;
-    if (soldNumbers.has(n)) btn.classList.add("sold");
+
+    if (soldNumbers.has(n)) {
+      btn.classList.add("sold");
+      btn.disabled = true;
+    }
+
     if (selected.has(n)) btn.classList.add("selected");
-    btn.disabled = soldNumbers.has(n);
-    btn.onclick = () => {
+
+    btn.addEventListener("click", () => {
       if (selected.has(n)) selected.delete(n);
       else selected.add(n);
-      renderGrid(document.getElementById("searchNumber").value.trim());
+
+      renderGrid(searchInput?.value.trim() || "");
       updateSelectionInfo();
-    };
+    });
+
     grid.appendChild(btn);
   }
 }
 
-// ── SELECTION INFO ──
 function updateSelectionInfo() {
   const qty = selected.size;
-  const total = qty * PRICE;
-  const fmt = (v) => v.toLocaleString("es-CO");
+  const unitPrice = Number(currentRaffle?.ticket_price || 0);
+  const total = qty * unitPrice;
 
-  document.getElementById("selCount").textContent = `${qty} número${qty !== 1 ? "s" : ""} seleccionado${qty !== 1 ? "s" : ""}`;
-  document.getElementById("selTotal").textContent = `$${fmt(total)} COP`;
+  document.getElementById("selCount").textContent = `${qty} numero${qty !== 1 ? "s" : ""} seleccionado${qty !== 1 ? "s" : ""}`;
+  document.getElementById("selTotal").textContent = `$${formatMoney(total)} COP`;
 
   const summary = document.getElementById("checkoutSummary");
+  if (!summary) return;
+
   if (qty === 0) {
-    summary.textContent = "Selecciona números arriba para ver el total.";
-  } else {
-    summary.innerHTML = `
-      <strong>Números seleccionados (${qty}):</strong><br>
-      <span style="color:#aabce0">${[...selected].join(", ")}</span><br><br>
-      <strong>Total a pagar: <span style="color:var(--gold)">$${fmt(total)} COP</span></strong>
-    `;
+    summary.textContent = "Selecciona numeros arriba para ver el total.";
+    return;
   }
+
+  const title = document.createElement("strong");
+  title.textContent = `Numeros seleccionados (${qty}):`;
+
+  const numbersLine = document.createElement("p");
+  numbersLine.className = "summary-numbers";
+  numbersLine.textContent = [...selected].join(", ");
+
+  const totalLine = document.createElement("strong");
+  totalLine.textContent = "Total a pagar: ";
+
+  const totalValue = document.createElement("span");
+  totalValue.className = "summary-total";
+  totalValue.textContent = `$${formatMoney(total)} COP`;
+
+  totalLine.appendChild(totalValue);
+  summary.replaceChildren(title, numbersLine, totalLine);
 }
 
-// ── PERSISTENCIA ──
-function saveState() {
-  localStorage.setItem(soldKey, JSON.stringify([...soldNumbers]));
-  localStorage.setItem(ordersKey, JSON.stringify(orders));
+async function fetchRaffles() {
+  const raffles = await request("/api/raffles");
+  if (!Array.isArray(raffles) || !raffles.length) {
+    throw new Error("No hay rifas disponibles en el backend.");
+  }
+
+  currentRaffle = raffles.find((item) => item.status === "active") || raffles[0];
+  updateHeaderFromRaffle();
 }
 
-// ── PDF ──
-function createSimplePdf(lines) {
-  const content = lines.join("\\n").replace(/[()]/g, "");
-  const stream = `BT /F1 12 Tf 50 760 Td (${content}) Tj ET`;
-  const pdf = `%PDF-1.4\n1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n5 0 obj<< /Length ${stream.length} >>stream\n${stream}\nendstream endobj\nxref\n0 6\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n0000000243 00000 n \n0000000313 00000 n \ntrailer<< /Size 6 /Root 1 0 R >>\nstartxref\n${350 + stream.length}\n%%EOF`;
-  return new Blob([pdf], { type: "application/pdf" });
+async function fetchSoldNumbers() {
+  if (!currentRaffle) return;
+  const out = await request(`/api/raffles/${currentRaffle.id}/numbers`);
+  soldNumbers = new Set(Array.isArray(out.sold) ? out.sold : []);
 }
 
-// ── SEARCH ──
-document.getElementById("searchNumber").addEventListener("input", (e) => {
-  renderGrid(e.target.value.trim());
-});
+function isWinnerNumberValid(number) {
+  if (!number) return true;
+  const value = Number(number);
+  return value >= 1 && value <= Number(currentRaffle.total_numbers || 0);
+}
 
-// ── QUICK SELECT ──
-document.querySelectorAll(".quick").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const qty = Number(btn.dataset.quick);
-    selected.clear();
-    for (let i = 1; i <= TOTAL_NUMBERS && selected.size < qty; i++) {
-      const n = pad(i);
-      if (!soldNumbers.has(n)) selected.add(n);
+async function ensureAdminToken() {
+  if (adminToken) return adminToken;
+
+  const username = window.prompt("Usuario admin:");
+  if (!username) return "";
+  const password = window.prompt("Clave admin:");
+  if (!password) return "";
+
+  const out = await request("/api/admin/login", {
+    method: "POST",
+    body: { username, password },
+  });
+
+  adminToken = out.token || "";
+  if (adminToken) sessionStorage.setItem("rifa_admin_token", adminToken);
+  return adminToken;
+}
+
+async function publishWinners() {
+  if (!currentRaffle) return;
+
+  const main = normalizeWinner(mainWinnerInput?.value || "");
+  const sub = normalizeWinner(subWinnerInput?.value || "");
+
+  if (!main && !sub) {
+    setCheckoutMessage("Ingresa al menos un numero ganador para publicar.", "error");
+    return;
+  }
+
+  if (!isWinnerNumberValid(main) || !isWinnerNumberValid(sub)) {
+    setCheckoutMessage("Hay numeros ganadores fuera del rango de la rifa.", "error");
+    return;
+  }
+
+  try {
+    const token = await ensureAdminToken();
+    if (!token) {
+      setCheckoutMessage("Inicio de sesion admin cancelado.", "error");
+      return;
     }
-    renderGrid(document.getElementById("searchNumber").value.trim());
+
+    const results = [];
+    if (main) {
+      results.push({ winner_type: "main", label: "Premio principal", winning_number: main });
+    }
+    if (sub) {
+      results.push({ winner_type: "subprize", label: "Subpremio", winning_number: sub });
+    }
+
+    await request(`/api/admin/raffles/${currentRaffle.id}/draw-results`, {
+      method: "POST",
+      body: { results },
+      token,
+    });
+
+    await renderWinners();
+    setCheckoutMessage("Ganadores publicados correctamente.", "success");
+  } catch (error) {
+    if (error.status === 401) {
+      adminToken = "";
+      sessionStorage.removeItem("rifa_admin_token");
+    }
+    setCheckoutMessage(error.message || "No se pudo publicar ganadores.", "error");
+  }
+}
+
+async function downloadReceipt(orderId, customerDocument) {
+  const response = await fetch(apiUrl(`/api/orders/${orderId}/receipt?document=${encodeURIComponent(customerDocument)}`));
+  if (!response.ok) {
+    let errText = "No se pudo descargar el comprobante";
+    try {
+      const payload = await response.json();
+      errText = payload.error || errText;
+    } catch {
+      // no-op
+    }
+    throw new Error(errText);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = `orden-${orderId}.pdf`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+async function submitCheckout(event) {
+  event.preventDefault();
+  if (!currentRaffle || !checkoutForm) return;
+
+  const minPurchase = Number(currentRaffle.min_purchase || 1);
+  if (selected.size < minPurchase) {
+    setCheckoutMessage(`Debes comprar minimo ${minPurchase} numeros.`, "error");
+    return;
+  }
+
+  const formData = new FormData(checkoutForm);
+  const customer = {
+    document: String(formData.get("document") || "").trim(),
+    first_name: String(formData.get("firstName") || "").trim(),
+    last_name: String(formData.get("lastName") || "").trim(),
+    email: String(formData.get("email") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    city: String(formData.get("city") || "").trim(),
+  };
+
+  const submitBtn = checkoutForm.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Procesando...";
+  }
+
+  try {
+    const out = await request("/api/orders", {
+      method: "POST",
+      body: {
+        raffle_id: currentRaffle.id,
+        numbers: [...selected],
+        customer,
+      },
+    });
+
+    try {
+      await downloadReceipt(out.order_id, customer.document);
+    } catch {
+      // receipt download failure should not rollback a successful order
+    }
+
+    selected.clear();
+    await fetchSoldNumbers();
+    updateProgress();
+    renderGrid(searchInput?.value.trim() || "");
     updateSelectionInfo();
-  });
-});
+    await renderWinners();
+    checkoutForm.reset();
 
-// ── LIMPIAR ──
-document.getElementById("clearSelection").onclick = () => {
-  selected.clear();
-  renderGrid(document.getElementById("searchNumber").value.trim());
-  updateSelectionInfo();
-};
-
-// ── CHECKOUT ──
-document.getElementById("checkoutForm").onsubmit = (e) => {
-  e.preventDefault();
-  const msg = document.getElementById("checkoutMsg");
-  if (selected.size < MIN_PURCHASE) {
-    msg.style.color = "var(--red)";
-    msg.textContent = `⚠️ Debes comprar mínimo ${MIN_PURCHASE} números.`;
-    return;
+    setCheckoutMessage(`Pago registrado. Orden ${out.order_id} completada.`, "success");
+  } catch (error) {
+    if (error.status === 409) {
+      await fetchSoldNumbers();
+      renderGrid(searchInput?.value.trim() || "");
+      updateProgress();
+      setCheckoutMessage("Algunos numeros ya fueron vendidos. Actualizamos la grilla para que elijas otros.", "error");
+    } else {
+      setCheckoutMessage(error.message || "No fue posible completar la compra.", "error");
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "ðŸ’³ PAGAR AHORA";
+    }
   }
-  const data = Object.fromEntries(new FormData(e.target).entries());
-  const numbers = [...selected];
-  numbers.forEach((n) => soldNumbers.add(n));
-  const orderId = `ORD-${Date.now()}`;
-  const order = { orderId, ...data, numbers, total: numbers.length * PRICE, createdAt: new Date().toISOString() };
-  orders.push(order);
-  saveState();
-  updateProgress();
-
-  const pdfBlob = createSimplePdf([
-    "COMPROBANTE RIFA ONLINE",
-    `Orden: ${orderId}`,
-    `Fecha: ${new Date().toLocaleString("es-CO")}`,
-    `Cliente: ${data.firstName} ${data.lastName}`,
-    `Documento: ${data.document}`,
-    `Ciudad: ${data.city || "N/D"}`,
-    `Numeros: ${numbers.join(",")}`,
-    `Total: $${(numbers.length * PRICE).toLocaleString("es-CO")} COP`,
-  ]);
-  const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${orderId}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
-
-  selected.clear();
-  renderGrid(document.getElementById("searchNumber").value.trim());
-  updateSelectionInfo();
-  msg.style.color = "var(--green)";
-  msg.textContent = `✅ ¡Pago registrado! Orden ${orderId}. Se descargó tu comprobante PDF.`;
-  e.target.reset();
-  renderWinners();
-};
-
-// ── LOOKUP ──
-document.getElementById("lookupBtn").onclick = () => {
-  const key = document.getElementById("lookup").value.trim().toLowerCase();
-  const list = document.getElementById("lookupResults");
-  list.innerHTML = "";
-  const found = orders.filter((o) => o.email.toLowerCase() === key || String(o.document).toLowerCase() === key);
-  if (!found.length) {
-    list.innerHTML = "<li>No se encontraron entradas con esos datos.</li>";
-    return;
-  }
-  found.forEach((o) => {
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <strong>${o.orderId}</strong> · ${o.numbers.length} números ·
-      <span style="color:var(--gold)">$${o.total.toLocaleString("es-CO")} COP</span><br>
-      <span style="color:var(--muted)">${o.numbers.join(", ")}</span>
-    `;
-    list.appendChild(li);
-  });
-};
-
-// ── WINNERS ──
-document.getElementById("setWinners").onclick = () => {
-  const main = document.getElementById("mainWinner").value.trim();
-  const sub = document.getElementById("subWinner").value.trim();
-  localStorage.setItem(winnersKey, JSON.stringify({ main, sub }));
-  renderWinners();
-};
-
-function findOwner(number) {
-  if (!number) return null;
-  const order = orders.find((o) => o.numbers.includes(number));
-  if (!order) return null;
-  return `${order.firstName[0]}*** ${order.lastName[0]}*** · ${order.city || "N/D"}`;
 }
 
-function renderWinners() {
-  const wrap = document.getElementById("winners");
-  const winners = JSON.parse(localStorage.getItem(winnersKey) || "{}");
-  wrap.innerHTML = "";
-  [
-    { label: "🥇 Premio principal", number: winners.main },
-    { label: "🥈 Subpremio", number: winners.sub },
-  ].forEach((w) => {
-    const card = document.createElement("div");
-    card.className = "winner-card";
-    const owner = findOwner(w.number);
-    card.innerHTML = `
-      <h3>${w.label}</h3>
-      <p>Número: <strong>${w.number || "-"}</strong></p>
-      <p>Ganador: ${owner || "<span style='color:#555'>Sin asignar</span>"}</p>
-    `;
-    wrap.appendChild(card);
-  });
+async function runLookup() {
+  if (!lookupInput || !lookupResults) return;
+
+  const key = lookupInput.value.trim();
+  if (!key) {
+    lookupResults.replaceChildren();
+    return;
+  }
+
+  lookupResults.replaceChildren();
+
+  try {
+    const out = await request(`/api/tickets/query?key=${encodeURIComponent(key)}`);
+
+    if (!Array.isArray(out) || !out.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No se encontraron entradas con esos datos.";
+      lookupResults.appendChild(empty);
+      return;
+    }
+
+    out.forEach((order) => {
+      const li = document.createElement("li");
+
+      const numbers = String(order.numbers || "").split(",").filter(Boolean);
+      const top = document.createElement("p");
+      top.className = "lookup-top";
+      top.textContent = `Orden #${order.order_id} Â· ${numbers.length} numero${numbers.length !== 1 ? "s" : ""} Â· `;
+
+      const amount = document.createElement("span");
+      amount.className = "lookup-amount";
+      amount.textContent = `$${formatMoney(Number(order.total || 0))} COP`;
+      top.appendChild(amount);
+
+      const numbersLine = document.createElement("p");
+      numbersLine.className = "lookup-numbers";
+      numbersLine.textContent = numbers.join(", ");
+
+      li.append(top, numbersLine);
+      lookupResults.appendChild(li);
+    });
+  } catch (error) {
+    const errItem = document.createElement("li");
+    errItem.textContent = error.message || "No se pudo consultar entradas.";
+    lookupResults.appendChild(errItem);
+  }
 }
 
-// ── INIT ──
-renderGrid();
-updateSelectionInfo();
-renderWinners();
+function buildWinnerCard(title, number, owner) {
+  const card = document.createElement("div");
+  card.className = "winner-card";
+
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+
+  const numberLine = document.createElement("p");
+  numberLine.textContent = `Numero: ${number || "-"}`;
+
+  const ownerLine = document.createElement("p");
+  ownerLine.textContent = `Ganador: ${owner || "Sin asignar"}`;
+
+  card.append(heading, numberLine, ownerLine);
+  return card;
+}
+
+async function renderWinners() {
+  if (!winnersWrap || !currentRaffle) return;
+
+  try {
+    const out = await request(`/api/raffles/${currentRaffle.id}/winners`);
+
+    if (!Array.isArray(out) || !out.length) {
+      winnersWrap.replaceChildren(
+        buildWinnerCard("Premio principal", "", "Sin asignar"),
+        buildWinnerCard("Subpremio", "", "Sin asignar"),
+      );
+      return;
+    }
+
+    const cards = out.map((winner) => {
+      const title = winner.label || "Premio";
+      return buildWinnerCard(title, winner.winning_number, winner.owner);
+    });
+
+    winnersWrap.replaceChildren(...cards);
+  } catch {
+    winnersWrap.replaceChildren(
+      buildWinnerCard("Premio principal", "", "No disponible"),
+      buildWinnerCard("Subpremio", "", "No disponible"),
+    );
+  }
+}
+
+function selectQuick(qty) {
+  if (!currentRaffle) return;
+
+  const total = Number(currentRaffle.total_numbers || 0);
+  const available = [];
+
+  for (let i = 1; i <= total; i += 1) {
+    const number = padNumber(i);
+    if (!soldNumbers.has(number)) available.push(number);
+  }
+
+  selected.clear();
+  for (let i = 0; i < available.length && selected.size < qty; i += 1) {
+    selected.add(available[i]);
+  }
+
+  renderGrid(searchInput?.value.trim() || "");
+  updateSelectionInfo();
+}
+
+function bindEvents() {
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      renderGrid(event.target.value.trim());
+    });
+  }
+
+  document.querySelectorAll(".quick").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectQuick(Number(btn.dataset.quick || 0));
+    });
+  });
+
+  if (clearSelectionBtn) {
+    clearSelectionBtn.addEventListener("click", () => {
+      selected.clear();
+      renderGrid(searchInput?.value.trim() || "");
+      updateSelectionInfo();
+    });
+  }
+
+  if (goCheckoutBtn && checkoutForm) {
+    goCheckoutBtn.addEventListener("click", () => {
+      checkoutForm.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+
+  if (checkoutForm) {
+    checkoutForm.addEventListener("submit", submitCheckout);
+  }
+
+  if (lookupBtn) {
+    lookupBtn.addEventListener("click", runLookup);
+  }
+
+  if (lookupInput) {
+    lookupInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runLookup();
+      }
+    });
+  }
+
+  const isAdminMode = new URLSearchParams(window.location.search).get("admin") === "1";
+  if (adminCard) adminCard.hidden = !isAdminMode;
+
+  if (isAdminMode && setWinnersBtn) {
+    setWinnersBtn.addEventListener("click", publishWinners);
+  }
+}
+
+async function bootstrap() {
+  bindEvents();
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+
+  clearLegacyLocalState();
+
+  try {
+    await fetchRaffles();
+    await fetchSoldNumbers();
+    updateProgress();
+    renderGrid();
+    updateSelectionInfo();
+    await renderWinners();
+  } catch (error) {
+    setCheckoutMessage(`No se pudo cargar la rifa desde backend: ${error.message}`, "error");
+  }
+}
+
+bootstrap();
