@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 app/data/*.db
+.env
+.env.*
+!.env.example
