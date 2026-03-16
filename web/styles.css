@@ -382,6 +382,17 @@ button:hover { background: #2176f0; }
   font-size: 13px;
   line-height: 1.8;
 }
+.footer-contact {
+  margin-top: 10px;
+}
+.whatsapp-link {
+  color: #6ef3a5;
+  font-weight: 700;
+  text-decoration: none;
+}
+.whatsapp-link:hover {
+  text-decoration: underline;
+}
 
 /* ── RESPONSIVE ── */
 @media (max-width: 680px) {
