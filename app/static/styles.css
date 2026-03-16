@@ -84,13 +84,20 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   background: linear-gradient(135deg, var(--accent), #6366f1);
   border-radius: 10px;
-  font-size: 18px;
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  overflow: hidden;
+}
+
+.hero-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .hero p {

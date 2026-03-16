@@ -463,6 +463,16 @@ class Handler(BaseHTTPRequestHandler):
                 ctype = "text/css"
             elif file_path.suffix == ".js":
                 ctype = "application/javascript"
+            elif file_path.suffix == ".svg":
+                ctype = "image/svg+xml"
+            elif file_path.suffix == ".png":
+                ctype = "image/png"
+            elif file_path.suffix in (".jpg", ".jpeg"):
+                ctype = "image/jpeg"
+            elif file_path.suffix == ".webp":
+                ctype = "image/webp"
+            elif file_path.suffix == ".ico":
+                ctype = "image/x-icon"
             self._send(200, file_path.read_bytes(), ctype)
             return
         self._send(404, "Not found", "text/plain")
