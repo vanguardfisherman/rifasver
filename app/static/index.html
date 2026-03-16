@@ -54,14 +54,10 @@
         <p id="raffleInfo"></p>
         <div id="subprizes" class="subprizes" aria-label="Subpremios"></div>
 
-        <div class="image-wrap">
-          <img id="raffleImage" alt="Premio de la rifa" loading="lazy" />
-        </div>
-
         <div class="progress-wrap">
-          <div class="progress-head">
-            <span class="progress-title">Progreso de ventas</span>
-            <span id="progressPercentBadge" class="progress-percent-badge">0%</span>
+          <div class="progress-header">
+            <span class="progress-label">🎟 Progreso de ventas</span>
+            <span id="progressPct" class="progress-pct-badge">0%</span>
           </div>
           <div class="progress-track">
             <div id="progressGoalMarker" class="progress-goal-marker" aria-hidden="true"></div>
@@ -71,6 +67,10 @@
             <small id="progressText"></small>
             <small id="progressGoalText"></small>
           </div>
+        </div>
+
+        <div class="image-wrap">
+          <img id="raffleImage" alt="Premio de la rifa" loading="lazy" />
         </div>
       </div>
 
@@ -93,8 +93,8 @@
             <b id="pack10">$0</b>
             <em>Seleccionar</em>
           </button>
-          <button class="pack" data-q="100" type="button">
-            <span>100 Tiquetes</span>
+          <button class="pack" data-q="20" type="button">
+            <span>20 Tiquetes</span>
             <b id="pack100">$0</b>
             <em>Seleccionar</em>
           </button>
