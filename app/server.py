@@ -43,6 +43,87 @@ def clamp_required_sales_pct(value) -> int:
     return max(1, min(100, pct))
 
 
+def parse_sales_milestones(raw_value):
+    if isinstance(raw_value, list):
+        parts = raw_value
+    else:
+        text = str(raw_value or "20,40,60,80").replace(";", ",")
+        parts = text.split(",")
+
+    milestones = []
+    for part in parts:
+        digits = "".join(ch for ch in str(part) if ch.isdigit())
+        if not digits:
+            continue
+        value = int(digits)
+        if 1 <= value <= 100 and value not in milestones:
+            milestones.append(value)
+
+    milestones.sort()
+    return milestones or [20, 40, 60, 80]
+
+
+def format_sales_milestones(raw_value) -> str:
+    return ",".join(str(n) for n in parse_sales_milestones(raw_value))
+
+
+def maybe_award_milestone(cur, raffle_id: int, order_id: int, order_numbers):
+    if not order_numbers:
+        return None
+
+    cur.execute("SELECT 1 FROM milestone_winners WHERE order_id=%s LIMIT 1", (order_id,))
+    if cur.fetchone():
+        return None
+
+    cur.execute("SELECT total_numbers, sales_milestones FROM raffles WHERE id=%s", (raffle_id,))
+    raffle = cur.fetchone()
+    if not raffle:
+        return None
+
+    milestones = parse_sales_milestones(raffle.get("sales_milestones"))
+    cur.execute("SELECT milestone_pct FROM milestone_winners WHERE raffle_id=%s", (raffle_id,))
+    awarded = {int(row["milestone_pct"]) for row in cur.fetchall()}
+    pending = [pct for pct in milestones if pct not in awarded]
+    if not pending:
+        return None
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS sold_count
+        FROM order_numbers n
+        JOIN orders o ON o.id = n.order_id
+        WHERE n.raffle_id=%s AND o.status IN ('paid_simulated', 'paid')
+        """,
+        (raffle_id,),
+    )
+    sold_count = int(cur.fetchone()["sold_count"] or 0)
+    total_numbers = max(1, int(raffle["total_numbers"] or 1))
+    current_pct = (sold_count * 100.0) / total_numbers
+
+    eligible = [pct for pct in pending if current_pct >= pct]
+    if not eligible:
+        return None
+
+    milestone_pct = min(eligible)
+    winning_number = random.choice(order_numbers)
+    label = f"Premio anticipado {milestone_pct}%"
+    now = datetime.utcnow().isoformat()
+
+    cur.execute(
+        """
+        INSERT INTO milestone_winners(raffle_id, milestone_pct, order_id, winning_number, label, created_at)
+        VALUES(%s, %s, %s, %s, %s, %s)
+        """,
+        (raffle_id, milestone_pct, order_id, winning_number, label, now),
+    )
+
+    return {
+        "milestone_pct": milestone_pct,
+        "winning_number": winning_number,
+        "label": label,
+    }
+
+
 def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
     text = f"{reference}{amount_in_cents}{currency}{WOMPI_INTEGRITY_SECRET}"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -121,6 +202,7 @@ def init_db():
             ticket_price INTEGER NOT NULL,
             min_purchase INTEGER NOT NULL,
             required_sales_pct INTEGER NOT NULL DEFAULT 70,
+            sales_milestones TEXT NOT NULL DEFAULT '20,40,60,80',
             status TEXT NOT NULL DEFAULT 'active',
             main_prize TEXT NOT NULL,
             image_url TEXT,
@@ -191,6 +273,21 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS milestone_winners (
+            id SERIAL PRIMARY KEY,
+            raffle_id INTEGER NOT NULL,
+            milestone_pct INTEGER NOT NULL,
+            order_id INTEGER NOT NULL UNIQUE,
+            winning_number TEXT NOT NULL,
+            label TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(raffle_id, milestone_pct),
+            FOREIGN KEY(raffle_id) REFERENCES raffles(id),
+            FOREIGN KEY(order_id) REFERENCES orders(id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             id SERIAL PRIMARY KEY,
             raffle_id INTEGER,
@@ -236,7 +333,15 @@ def init_db():
         END $$
     """)
 
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE raffles ADD COLUMN sales_milestones TEXT NOT NULL DEFAULT '20,40,60,80';
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$
+    """)
+
     cur.execute("UPDATE raffles SET required_sales_pct = LEAST(100, GREATEST(1, COALESCE(required_sales_pct, 70)))")
+    cur.execute("UPDATE raffles SET sales_milestones = '20,40,60,80' WHERE sales_milestones IS NULL OR btrim(sales_milestones) = ''")
 
     cur.execute("SELECT COUNT(*) AS c FROM admins")
     if cur.fetchone()["c"] == 0:
@@ -250,8 +355,8 @@ def init_db():
         now = datetime.utcnow().isoformat()
         cur.execute(
             """
-            INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, status, main_prize, image_url, updated_at)
-            VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, sales_milestones, status, main_prize, image_url, updated_at)
+            VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
             (
                 "🎉 Gana $4.000.000",
@@ -260,6 +365,7 @@ def init_db():
                 1000,
                 5,
                 70,
+                "20,40,60,80",
                 "active",
                 "$4.000.000 COP",
                 "",
@@ -455,8 +561,28 @@ class Handler(BaseHTTPRequestHandler):
                 owner = cur.fetchone()
                 winners.append({
                     **to_dict(r),
-                    "owner": f"{owner['first_name'][0]}*** {owner['last_name'][0]}*** • {owner['city'] or 'N/D'}" if owner else "Sin asignar",
+                    "owner": f"{owner['first_name'][0]}*** {owner['last_name'][0]}*** - {owner['city'] or 'N/D'}" if owner else "Sin asignar",
                 })
+
+            cur.execute(
+                """
+                SELECT mw.milestone_pct, mw.winning_number, mw.label, c.first_name, c.last_name, c.city
+                FROM milestone_winners mw
+                JOIN orders o ON o.id = mw.order_id
+                JOIN customers c ON c.id = o.customer_id
+                WHERE mw.raffle_id=%s
+                ORDER BY mw.milestone_pct
+                """,
+                (raffle_id,),
+            )
+            for row in cur.fetchall():
+                winners.append({
+                    "winner_type": "milestone",
+                    "label": row["label"] or f"Premio anticipado {row['milestone_pct']}%",
+                    "winning_number": row["winning_number"],
+                    "owner": f"{row['first_name'][0]}*** {row['last_name'][0]}*** - {row['city'] or 'N/D'}",
+                })
+
             conn.close()
             return self._json(200, winners)
 
@@ -473,10 +599,19 @@ class Handler(BaseHTTPRequestHandler):
                 (order_id, doc),
             )
             row = cur.fetchone()
-            conn.close()
             if not row:
+                conn.close()
                 return self._json(404, {"error": "Orden no encontrada"})
-            return self._json(200, to_dict(row))
+            data = to_dict(row)
+            cur.execute(
+                "SELECT milestone_pct, winning_number, label FROM milestone_winners WHERE order_id=%s LIMIT 1",
+                (order_id,),
+            )
+            milestone = cur.fetchone()
+            if milestone:
+                data["milestone_award"] = to_dict(milestone)
+            conn.close()
+            return self._json(200, data)
 
         if path.startswith("/api/orders/") and path.endswith("/receipt"):
             order_id = int(path.split("/")[3])
@@ -660,9 +795,13 @@ class Handler(BaseHTTPRequestHandler):
                 "INSERT INTO order_numbers(order_id, raffle_id, number) VALUES(%s, %s, %s)",
                 [(order_id, raffle_id, n) for n in numbers],
             )
+            milestone_award = maybe_award_milestone(cur, raffle_id, order_id, numbers)
             conn.commit()
             conn.close()
-            return self._json(201, {"order_id": order_id, "total": total, "numbers": numbers})
+            payload = {"order_id": order_id, "total": total, "numbers": numbers}
+            if milestone_award:
+                payload["milestone_award"] = milestone_award
+            return self._json(201, payload)
 
         if path == "/api/payments/init":
             raffle_id = int(data["raffle_id"])
@@ -745,9 +884,13 @@ class Handler(BaseHTTPRequestHandler):
                     "INSERT INTO order_numbers(order_id, raffle_id, number) VALUES(%s, %s, %s)",
                     [(order_id, raffle_id, n) for n in numbers],
                 )
+                milestone_award = maybe_award_milestone(cur, raffle_id, order_id, numbers)
                 conn.commit()
                 conn.close()
-                return self._json(201, {"mode": "simulated", "order_id": order_id, "total": total, "numbers": numbers})
+                payload = {"mode": "simulated", "order_id": order_id, "total": total, "numbers": numbers}
+                if milestone_award:
+                    payload["milestone_award"] = milestone_award
+                return self._json(201, payload)
 
         if path == "/api/webhooks/wompi":
             if not WOMPI_EVENTS_SECRET:
@@ -784,10 +927,16 @@ class Handler(BaseHTTPRequestHandler):
             now = datetime.utcnow().isoformat()
             if status == "APPROVED" and order["status"] == "pending_payment":
                 cur.execute("UPDATE orders SET status='paid' WHERE id=%s", (order["id"],))
+                cur.execute("SELECT number FROM order_numbers WHERE order_id=%s", (order["id"],))
+                order_numbers = [r["number"] for r in cur.fetchall()]
+                milestone_award = maybe_award_milestone(cur, order["raffle_id"], order["id"], order_numbers)
+                approved_payload = {"reference": reference, "transaction_id": transaction_id}
+                if milestone_award:
+                    approved_payload["milestone_award"] = milestone_award
                 cur.execute(
                     "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                     (order["raffle_id"], "payment_approved",
-                     json.dumps({"reference": reference, "transaction_id": transaction_id}), now),
+                     json.dumps(approved_payload), now),
                 )
             elif status in ("DECLINED", "VOIDED", "ERROR") and order["status"] == "pending_payment":
                 cur.execute("DELETE FROM order_numbers WHERE order_id=%s", (order["id"],))
@@ -808,14 +957,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/raffles":
             now = datetime.utcnow().isoformat()
             required_sales_pct = clamp_required_sales_pct(data.get("required_sales_pct", 70))
+            sales_milestones = format_sales_milestones(data.get("sales_milestones", "20,40,60,80"))
             cur.execute(
                 """
-                INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, status, main_prize, image_url, updated_at)
-                VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, sales_milestones, status, main_prize, image_url, updated_at)
+                VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
                 """,
                 (
                     data["title"], data.get("description", ""), int(data["total_numbers"]), int(data["ticket_price"]),
-                    int(data.get("min_purchase", 1)), required_sales_pct, data.get("status", "active"),
+                    int(data.get("min_purchase", 1)), required_sales_pct, sales_milestones, data.get("status", "active"),
                     data.get("main_prize", ""), data.get("image_url", ""), now
                 )
             )
@@ -962,7 +1112,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/admin/raffles/"):
             raffle_id = int(path.split("/")[4])
-            allowed = ["title", "description", "total_numbers", "ticket_price", "min_purchase", "required_sales_pct", "main_prize", "image_url", "status"]
+            allowed = ["title", "description", "total_numbers", "ticket_price", "min_purchase", "required_sales_pct", "sales_milestones", "main_prize", "image_url", "status"]
             int_fields = {"total_numbers", "ticket_price", "min_purchase", "required_sales_pct"}
             sets, vals = [], []
             for k in allowed:
@@ -976,6 +1126,8 @@ class Handler(BaseHTTPRequestHandler):
                             return self._json(400, {"error": f"Valor inválido para {k}"})
                         if k == "required_sales_pct":
                             value = clamp_required_sales_pct(value)
+                    if k == "sales_milestones":
+                        value = format_sales_milestones(value)
                     sets.append(f"{k}=%s")
                     vals.append(value)
             if not sets:

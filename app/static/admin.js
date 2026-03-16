@@ -128,6 +128,7 @@ async function onRaffleSelect(){
   form.ticket_price.value = currentRaffle.ticket_price;
   form.min_purchase.value = currentRaffle.min_purchase;
   form.required_sales_pct.value = currentRaffle.required_sales_pct || 70;
+  form.sales_milestones.value = currentRaffle.sales_milestones || '20,40,60,80';
   form.status.value = currentRaffle.status;
 
   const sub = await api(`/api/raffles/${id}/subprizes`);
