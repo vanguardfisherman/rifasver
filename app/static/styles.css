@@ -483,11 +483,40 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.progress-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.progress-pct-badge {
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--success));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.01em;
 }
 
 .progress-track {
-  height: 8px;
-  background: var(--bg-subtle);
+  height: 10px;
+  background: var(--surface-raised);
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -499,6 +528,7 @@ select:focus {
   border-radius: 999px;
   width: 0%;
   transition: width 0.6s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 0 8px rgba(59,130,246,0.3);
 }
 
 small,
@@ -517,13 +547,14 @@ small,
 .pack {
   position: relative;
   text-align: left;
-  padding: 16px;
+  padding: 14px 14px 14px 14px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
   transition: var(--transition);
-  overflow: hidden;
+  overflow: visible;
+  min-width: 0;
 }
 
 .pack::before {
@@ -545,17 +576,20 @@ small,
   color: var(--text-secondary);
   font-weight: 700;
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .pack b {
   display: block;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  margin: 6px 0 10px;
+  margin: 4px 0 8px;
   color: var(--text);
+  white-space: nowrap;
 }
 
 .pack em {

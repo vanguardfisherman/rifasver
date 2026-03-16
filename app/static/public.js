@@ -23,7 +23,10 @@ function renderProgress() {
   const available = total - soldCount;
   const percent = total > 0 ? Math.round((soldCount / total) * 100) : 0;
   $('#progressBar').style.width = `${percent}%`;
-  $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} — ${available.toLocaleString('es-CO')} disponibles`;
+  $('#progressBar').setAttribute('aria-valuenow', percent);
+  $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos · ${available.toLocaleString('es-CO')} disponibles`;
+  const pctBadge = $('#progressPct');
+  if (pctBadge) pctBadge.textContent = `${percent}%`;
 }
 
 function syncSticky() {
@@ -40,11 +43,15 @@ function syncSticky() {
 }
 
 function updateSelInfo() {
-  const total = quantity * Number(currentRaffle.ticket_price || 0);
+  const price = Number(currentRaffle.ticket_price || 0);
+  const total = quantity * price;
+  const selEl = $('#selInfo');
   if (quantity > 0) {
-    $('#selInfo').textContent = `${quantity} tiquete${quantity !== 1 ? 's' : ''} • Total: ${formatCop(total)}`;
+    selEl.innerHTML = `<strong>${quantity} tiquete${quantity !== 1 ? 's' : ''}</strong> &nbsp;·&nbsp; Total: <strong>${formatCop(total)}</strong>`;
+    selEl.style.color = 'var(--success)';
   } else {
-    $('#selInfo').textContent = '';
+    selEl.innerHTML = '';
+    selEl.style.color = '';
   }
   syncSticky();
 }
@@ -61,7 +68,7 @@ function fillPackPrices() {
   $('#pack2').textContent = formatCop(price * 2);
   $('#pack5').textContent = formatCop(price * 5);
   $('#pack10').textContent = formatCop(price * 10);
-  $('#pack100').textContent = formatCop(price * 100);
+  $('#pack100').textContent = formatCop(price * 20);
 }
 
 function renderTicker(raffleInfoText) {
@@ -109,7 +116,7 @@ async function onRaffleChange() {
   quantity = 0;
 
   $('#raffleTitle').textContent = currentRaffle.title;
-  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} | Mínimo: ${currentRaffle.min_purchase}`;
+  $('#raffleInfo').textContent = `Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} · Mínimo: ${currentRaffle.min_purchase} tiquete${currentRaffle.min_purchase !== 1 ? 's' : ''}`;
   const raffleInfo = `⭐ Premio: ${currentRaffle.main_prize} — Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} — Mínimo: ${currentRaffle.min_purchase} tiquetes`;
   renderTicker(raffleInfo);
 
