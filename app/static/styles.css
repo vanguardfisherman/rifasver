@@ -84,12 +84,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  background: linear-gradient(135deg, var(--accent), #6366f1);
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  background: radial-gradient(circle at 30% 30%, rgba(111,255,130,0.16), rgba(9,18,28,0.95) 65%);
+  border-radius: 14px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  border: 1px solid rgba(111, 255, 130, 0.28);
+  box-shadow: 0 8px 22px rgba(8, 15, 22, 0.45), 0 0 18px rgba(164, 255, 75, 0.2);
   overflow: hidden;
 }
 
@@ -97,6 +98,8 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scale(1.12);
+  filter: saturate(1.18) contrast(1.08) brightness(1.04);
   display: block;
 }
 
@@ -108,6 +111,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .live-badge {
@@ -1471,10 +1475,21 @@ header:not(.hero) nav a:hover {
 /* ========== RESPONSIVE ========== */
 @media (max-width: 980px) {
   .hero {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     padding: 16px 20px;
+    flex-wrap: wrap;
+  }
+
+  .hero > div {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .hero nav {
+    margin-left: auto;
   }
 
   main {
@@ -1509,6 +1524,20 @@ header:not(.hero) nav a:hover {
 }
 
 @media (max-width: 640px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero nav {
+    margin-left: 0;
+  }
+
+  .hero h1 .hero-icon {
+    width: 42px;
+    height: 42px;
+  }
+
   .pack-grid {
     grid-template-columns: 1fr;
   }
