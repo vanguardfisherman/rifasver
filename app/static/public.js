@@ -5,6 +5,7 @@ let currentRaffle = null;
 let sold = new Set();
 let quantity = 0;
 let siteSettings = { whatsapp: '', email: '', ticker_items: [] };
+const DEFAULT_WHATSAPP = '573224620502';
 
 async function api(path, options = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
@@ -15,6 +16,12 @@ async function api(path, options = {}) {
 
 function formatCop(value) {
   return `$ ${Number(value).toLocaleString('es-CO')}`;
+}
+
+function getRequiredSalesPct() {
+  const parsed = Number(currentRaffle?.required_sales_pct);
+  if (Number.isFinite(parsed)) return Math.max(1, Math.min(100, Math.round(parsed)));
+  return 70;
 }
 
 function renderProgress() {
@@ -82,9 +89,8 @@ function renderTicker(raffleInfoText) {
 }
 
 function applyContactSettings() {
-  const wa = siteSettings.whatsapp
-    ? `https://wa.me/${siteSettings.whatsapp.replace(/\D/g, '')}`
-    : '#';
+  const waDigits = (siteSettings.whatsapp || DEFAULT_WHATSAPP).replace(/\D/g, '');
+  const wa = waDigits ? `https://wa.me/${waDigits}` : `https://wa.me/${DEFAULT_WHATSAPP}`;
   const email = siteSettings.email || 'soporte@tuempresa.com';
   const emailHref = `mailto:${email}`;
 
@@ -114,7 +120,12 @@ async function onRaffleChange() {
   const id = currentRaffle.id;
   sold = new Set((await api(`/api/raffles/${id}/numbers`)).sold);
   quantity = 0;
-
+  const milestonesText = (currentRaffle.sales_milestones || '20,40,60,80')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => `${item}%`)
+    .join(' / ');
   $('#raffleTitle').textContent = currentRaffle.title;
   $('#raffleInfo').textContent = `Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} · Mínimo: ${currentRaffle.min_purchase} tiquete${currentRaffle.min_purchase !== 1 ? 's' : ''}`;
   const raffleInfo = `⭐ Premio: ${currentRaffle.main_prize} — Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} — Mínimo: ${currentRaffle.min_purchase} tiquetes`;
@@ -180,8 +191,11 @@ async function buy(e) {
 
     if (init.mode === 'simulated') {
       try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}
-      const numsStr = init.numbers ? ` Números asignados: ${init.numbers.join(', ')}` : '';
-      setMsg(msgEl, `✓ Compra exitosa. Orden #${init.order_id} — Comprobante descargado.${numsStr}`, 'success');
+      const numsStr = init.numbers ? ` Numeros asignados: ${init.numbers.join(', ')}` : '';
+      const milestoneStr = init.milestone_award
+        ? ` Premio anticipado desbloqueado (${init.milestone_award.milestone_pct}%): numero ganador ${init.milestone_award.winning_number}.`
+        : '';
+      setMsg(msgEl, `Compra exitosa. Orden #${init.order_id}. Comprobante descargado.${numsStr}${milestoneStr}`, 'success');
       await onRaffleChange();
       e.target.reset();
       return;
@@ -209,7 +223,14 @@ async function buy(e) {
     checkout.open(async function (result) {
       const { transaction } = result;
       if (transaction && transaction.status === 'APPROVED') {
-        setMsg(msgEl, `✓ ¡Pago aprobado! Orden #${init.order_id} — Descargando comprobante...`, 'success');
+        let milestoneStr = '';
+        try {
+          const statusInfo = await api(`/api/orders/${init.order_id}/status?document=${encodeURIComponent(customer.document)}`);
+          if (statusInfo.milestone_award) {
+            milestoneStr = ` Premio anticipado desbloqueado (${statusInfo.milestone_award.milestone_pct}%): numero ganador ${statusInfo.milestone_award.winning_number}.`;
+          }
+        } catch (_) {}
+        setMsg(msgEl, `Pago aprobado. Orden #${init.order_id}.${milestoneStr}`, 'success');
         try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}
         await onRaffleChange();
         e.target.reset();

@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#060a13" />
-  <title>Admin - Plataforma de Rifas</title>
+  <title>Admin - InversionesEJF</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1322'/%3E%3Ccircle cx='36' cy='31' r='16' fill='%2397ec64' stroke='%2349b84f' stroke-width='2'/%3E%3Cpath d='M29 18h16v3L36 45h-6l8-22h-9z' fill='white'/%3E%3Crect x='9' y='24' width='20' height='12' rx='2.5' transform='rotate(-12 19 30)' fill='%23f4c400' stroke='%23ffd400' stroke-width='1.2'/%3E%3C/svg%3E" />
+  <link rel="shortcut icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1322'/%3E%3Ccircle cx='36' cy='31' r='16' fill='%2397ec64' stroke='%2349b84f' stroke-width='2'/%3E%3Cpath d='M29 18h16v3L36 45h-6l8-22h-9z' fill='white'/%3E%3Crect x='9' y='24' width='20' height='12' rx='2.5' transform='rotate(-12 19 30)' fill='%23f4c400' stroke='%23ffd400' stroke-width='1.2'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -49,6 +51,8 @@
           <input name="total_numbers" type="number" placeholder="Total de numeros" required aria-label="Total numeros" />
           <input name="ticket_price" type="number" placeholder="Precio por numero ($)" required aria-label="Precio" />
           <input name="min_purchase" type="number" placeholder="Minimo de compra" required aria-label="Minimo compra" />
+          <input name="required_sales_pct" type="number" min="1" max="100" placeholder="Porcentaje minimo de ventas para iniciar sorteo (%)" required aria-label="Porcentaje minimo de ventas" />
+          <input name="sales_milestones" placeholder="Hitos de premios anticipados (ej: 20,40,60,80)" aria-label="Hitos de premios anticipados" />
           <select name="status" aria-label="Estado de la rifa">
             <option value="active">Activa</option>
             <option value="closed">Cerrada</option>
@@ -68,8 +72,12 @@
       <div class="admin-section">
         <h3><span class="sub-icon">🏆</span>Publicar ganadores</h3>
         <form id="winnersForm">
-          <input name="main" placeholder="Numero ganador principal (ej: 0042)" maxlength="4" aria-label="Numero ganador principal" />
-          <input name="sub" placeholder="Numero subpremio (ej: 0123)" maxlength="4" aria-label="Numero subpremio" />
+          <input name="main" placeholder="Numero ganador principal (ej: 0042)" maxlength="4" aria-label="Numero ganador principal" required />
+          <div class="subwinner-head">
+            <label>Subganadores</label>
+            <button id="addSubwinnerBtn" type="button">+ Agregar subganador</button>
+          </div>
+          <div id="subwinnerRows" class="subwinner-rows"></div>
           <button type="submit">Publicar ganadores</button>
         </form>
       </div>
