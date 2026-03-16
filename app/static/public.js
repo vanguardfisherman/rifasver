@@ -5,6 +5,7 @@ let currentRaffle = null;
 let sold = new Set();
 let quantity = 0;
 let siteSettings = { whatsapp: '', email: '', ticker_items: [] };
+const DEFAULT_WHATSAPP = '573224620502';
 
 async function api(path, options = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
@@ -75,9 +76,8 @@ function renderTicker(raffleInfoText) {
 }
 
 function applyContactSettings() {
-  const wa = siteSettings.whatsapp
-    ? `https://wa.me/${siteSettings.whatsapp.replace(/\D/g, '')}`
-    : '#';
+  const waDigits = (siteSettings.whatsapp || DEFAULT_WHATSAPP).replace(/\D/g, '');
+  const wa = waDigits ? `https://wa.me/${waDigits}` : `https://wa.me/${DEFAULT_WHATSAPP}`;
   const email = siteSettings.email || 'soporte@tuempresa.com';
   const emailHref = `mailto:${email}`;
 
