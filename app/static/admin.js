@@ -3,6 +3,64 @@ const $ = (s) => document.querySelector(s);
 let token = '';
 let raffles = [];
 let currentRaffle = null;
+let currentSubprizeLabels = [];
+
+function normalizeWinnerNumber(raw) {
+  const digits = String(raw || '').replace(/\D/g, '').slice(-4);
+  return digits ? digits.padStart(4, '0') : '';
+}
+
+function refreshSubwinnerRows() {
+  const rows = Array.from(document.querySelectorAll('#subwinnerRows .subwinner-row'));
+  rows.forEach((row, index) => {
+    const input = row.querySelector('input[name="subWinner"]');
+    const removeBtn = row.querySelector('.remove-subwinner-btn');
+    if (input) {
+      input.placeholder = `Numero subganador #${index + 1} (ej: 0123)`;
+      input.setAttribute('aria-label', `Numero subganador ${index + 1}`);
+    }
+    if (removeBtn) removeBtn.disabled = rows.length === 1 && !(input && input.value.trim());
+  });
+}
+
+function addSubwinnerRow(value = '') {
+  const wrap = $('#subwinnerRows');
+  if (!wrap) return;
+
+  const row = document.createElement('div');
+  row.className = 'subwinner-row';
+
+  const input = document.createElement('input');
+  input.name = 'subWinner';
+  input.maxLength = 4;
+  input.value = value;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'remove-subwinner-btn';
+  removeBtn.textContent = 'Quitar';
+  removeBtn.addEventListener('click', () => {
+    const allRows = Array.from(document.querySelectorAll('#subwinnerRows .subwinner-row'));
+    if (allRows.length === 1) {
+      input.value = '';
+      refreshSubwinnerRows();
+      return;
+    }
+    row.remove();
+    refreshSubwinnerRows();
+  });
+
+  row.append(input, removeBtn);
+  wrap.appendChild(row);
+  refreshSubwinnerRows();
+}
+
+function ensureSubwinnerRows() {
+  const wrap = $('#subwinnerRows');
+  if (!wrap) return;
+  if (!wrap.children.length) addSubwinnerRow();
+  else refreshSubwinnerRows();
+}
 
 async function api(path, options = {}) {
   const headers = {'Content-Type':'application/json', ...(options.headers || {})};
@@ -69,10 +127,15 @@ async function onRaffleSelect(){
   form.total_numbers.value = currentRaffle.total_numbers;
   form.ticket_price.value = currentRaffle.ticket_price;
   form.min_purchase.value = currentRaffle.min_purchase;
+  form.required_sales_pct.value = currentRaffle.required_sales_pct || 70;
   form.status.value = currentRaffle.status;
 
   const sub = await api(`/api/raffles/${id}/subprizes`);
+  currentSubprizeLabels = sub.map(s => s.name).filter(Boolean);
   $('#subprizesInput').value = sub.map(s => `${s.name}|${s.description}`).join('\n');
+  const subwinnerRows = $('#subwinnerRows');
+  if (subwinnerRows) subwinnerRows.innerHTML = '';
+  ensureSubwinnerRows();
 }
 
 async function saveRaffle(e){
@@ -106,20 +169,32 @@ async function saveSubprizes(e){
 
 async function setWinners(e){
   e.preventDefault();
-  const btn = e.target.querySelector('button');
+  const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   try{
     const fd = new FormData(e.target);
+    const mainWinner = normalizeWinnerNumber(fd.get('main'));
+    if (!mainWinner) throw new Error('Debes ingresar el numero ganador principal.');
+
+    const subWinnerInputs = Array.from(document.querySelectorAll('#subwinnerRows input[name="subWinner"]'));
+    const subWinners = subWinnerInputs
+      .map((input) => normalizeWinnerNumber(input.value))
+      .filter(Boolean);
+
     const results = [
-      {winner_type:'main', label:'Premio principal', winning_number: fd.get('main') || '0000'},
-      {winner_type:'subprize', label:'Subpremio', winning_number: fd.get('sub') || '0000'},
+      {winner_type:'main', label:'Premio principal', winning_number: mainWinner},
+      ...subWinners.map((number, index) => ({
+        winner_type: 'subprize',
+        label: currentSubprizeLabels[index] || `Subganador ${index + 1}`,
+        winning_number: number,
+      })),
     ];
+
     await api(`/api/admin/raffles/${currentRaffle.id}/draw-results`, {method:'POST', body: JSON.stringify({results})});
-    setMsg($('#adminMsg'), '🏆 Ganadores publicados exitosamente', 'success');
-  }catch(err){ setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
+    setMsg($('#adminMsg'), `Ganadores publicados exitosamente (${1 + subWinners.length} total).`, 'success');
+  }catch(err){ setMsg($('#adminMsg'), `Error: ${err.message}`, 'error'); }
   finally { btn.disabled = false; }
 }
-
 const STATUS_LABELS = {
   paid: { label: 'Pagado', color: 'var(--success)' },
   paid_simulated: { label: 'Simulado', color: 'var(--accent)' },
@@ -366,6 +441,7 @@ $('#raffleSelect').addEventListener('change', onRaffleSelect);
 $('#editRaffle').addEventListener('submit', saveRaffle);
 $('#subprizesForm').addEventListener('submit', saveSubprizes);
 $('#winnersForm').addEventListener('submit', setWinners);
+$('#addSubwinnerBtn').addEventListener('click', () => addSubwinnerRow());
 $('#refreshOrders').addEventListener('click', loadOrders);
 $('#settingsForm').addEventListener('submit', saveSettings);
 $('#loadAudit').addEventListener('click', loadAudit);
@@ -388,4 +464,5 @@ function logout() {
 
 $('#logoutBtn').addEventListener('click', logout);
 
+ensureSubwinnerRows();
 setState(false);

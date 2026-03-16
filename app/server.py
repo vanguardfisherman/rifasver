@@ -35,6 +35,14 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def clamp_required_sales_pct(value) -> int:
+    try:
+        pct = int(value)
+    except (TypeError, ValueError):
+        pct = 70
+    return max(1, min(100, pct))
+
+
 def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
     text = f"{reference}{amount_in_cents}{currency}{WOMPI_INTEGRITY_SECRET}"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -112,6 +120,7 @@ def init_db():
             total_numbers INTEGER NOT NULL,
             ticket_price INTEGER NOT NULL,
             min_purchase INTEGER NOT NULL,
+            required_sales_pct INTEGER NOT NULL DEFAULT 70,
             status TEXT NOT NULL DEFAULT 'active',
             main_prize TEXT NOT NULL,
             image_url TEXT,
@@ -220,6 +229,15 @@ def init_db():
         END $$
     """)
 
+    cur.execute("""
+        DO $$ BEGIN
+            ALTER TABLE raffles ADD COLUMN required_sales_pct INTEGER NOT NULL DEFAULT 70;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$
+    """)
+
+    cur.execute("UPDATE raffles SET required_sales_pct = LEAST(100, GREATEST(1, COALESCE(required_sales_pct, 70)))")
+
     cur.execute("SELECT COUNT(*) AS c FROM admins")
     if cur.fetchone()["c"] == 0:
         cur.execute(
@@ -232,8 +250,8 @@ def init_db():
         now = datetime.utcnow().isoformat()
         cur.execute(
             """
-            INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, status, main_prize, image_url, updated_at)
-            VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, status, main_prize, image_url, updated_at)
+            VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
             (
                 "🎉 Gana $4.000.000",
@@ -241,6 +259,7 @@ def init_db():
                 500,
                 1000,
                 5,
+                70,
                 "active",
                 "$4.000.000 COP",
                 "",
@@ -788,14 +807,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/admin/raffles":
             now = datetime.utcnow().isoformat()
+            required_sales_pct = clamp_required_sales_pct(data.get("required_sales_pct", 70))
             cur.execute(
                 """
-                INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, status, main_prize, image_url, updated_at)
-                VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                INSERT INTO raffles(title, description, total_numbers, ticket_price, min_purchase, required_sales_pct, status, main_prize, image_url, updated_at)
+                VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
                 """,
                 (
                     data["title"], data.get("description", ""), int(data["total_numbers"]), int(data["ticket_price"]),
-                    int(data.get("min_purchase", 1)), data.get("status", "active"), data.get("main_prize", ""), data.get("image_url", ""), now
+                    int(data.get("min_purchase", 1)), required_sales_pct, data.get("status", "active"),
+                    data.get("main_prize", ""), data.get("image_url", ""), now
                 )
             )
             rid = cur.fetchone()["id"]
@@ -829,16 +850,50 @@ class Handler(BaseHTTPRequestHandler):
             raffle_id = int(path.split("/")[4])
             results = data.get("results", [])
             now = datetime.utcnow().isoformat()
-            cur.execute("DELETE FROM draw_results WHERE raffle_id=%s", (raffle_id,))
+
+            if not isinstance(results, list) or not results:
+                conn.close()
+                return self._json(400, {"error": "Debes enviar al menos un ganador."})
+
+            cur.execute("SELECT total_numbers FROM raffles WHERE id=%s", (raffle_id,))
+            raffle = cur.fetchone()
+            if not raffle:
+                conn.close()
+                return self._json(404, {"error": "Rifa no existe"})
+
+            validated_results = []
             for item in results:
-                num = str(item["winning_number"]).zfill(4)
+                raw_number = str(item.get("winning_number", "")).strip()
+                digits = "".join(ch for ch in raw_number if ch.isdigit())
+                if not digits:
+                    continue
+                numeric = int(digits)
+                if numeric < 1 or numeric > int(raffle["total_numbers"]):
+                    conn.close()
+                    return self._json(400, {"error": f"Número ganador fuera de rango: {raw_number}"})
+                validated_results.append({
+                    "winner_type": item.get("winner_type", "subprize"),
+                    "label": item.get("label", "Premio"),
+                    "winning_number": str(numeric).zfill(4),
+                })
+
+            if not validated_results:
+                conn.close()
+                return self._json(400, {"error": "No se enviaron números ganadores válidos."})
+
+            if not any(r["winner_type"] == "main" for r in validated_results):
+                conn.close()
+                return self._json(400, {"error": "Debes incluir un ganador principal."})
+
+            cur.execute("DELETE FROM draw_results WHERE raffle_id=%s", (raffle_id,))
+            for item in validated_results:
                 cur.execute(
                     "INSERT INTO draw_results(raffle_id, winner_type, label, winning_number, created_at) VALUES(%s, %s, %s, %s, %s)",
-                    (raffle_id, item.get("winner_type", "subprize"), item.get("label", "Premio"), num, now),
+                    (raffle_id, item["winner_type"], item["label"], item["winning_number"], now),
                 )
             cur.execute(
                 "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
-                (raffle_id, "set_winners", json.dumps(data), now)
+                (raffle_id, "set_winners", json.dumps({"results": validated_results}), now)
             )
             conn.commit()
             conn.close()
@@ -907,12 +962,22 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/admin/raffles/"):
             raffle_id = int(path.split("/")[4])
-            allowed = ["title", "description", "total_numbers", "ticket_price", "min_purchase", "main_prize", "image_url", "status"]
+            allowed = ["title", "description", "total_numbers", "ticket_price", "min_purchase", "required_sales_pct", "main_prize", "image_url", "status"]
+            int_fields = {"total_numbers", "ticket_price", "min_purchase", "required_sales_pct"}
             sets, vals = [], []
             for k in allowed:
                 if k in data:
+                    value = data[k]
+                    if k in int_fields:
+                        try:
+                            value = int(value)
+                        except (TypeError, ValueError):
+                            conn.close()
+                            return self._json(400, {"error": f"Valor inválido para {k}"})
+                        if k == "required_sales_pct":
+                            value = clamp_required_sales_pct(value)
                     sets.append(f"{k}=%s")
-                    vals.append(data[k])
+                    vals.append(value)
             if not sets:
                 conn.close()
                 return self._json(400, {"error": "Sin cambios"})

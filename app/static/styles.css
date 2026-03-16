@@ -482,29 +482,103 @@ select:focus {
 .progress-wrap {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 100%);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.progress-percent-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 62px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.progress-percent-badge.goal-pending {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.progress-percent-badge.goal-met {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.35);
 }
 
 .progress-track {
-  height: 8px;
-  background: var(--bg-subtle);
+  height: 14px;
+  background: linear-gradient(180deg, #08111f 0%, #0c1526 100%);
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(59,130,246,0.35);
+  position: relative;
 }
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--success));
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 45%, #10b981 100%);
   border-radius: 999px;
   width: 0%;
   transition: width 0.6s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 0 16px rgba(59,130,246,0.35);
+}
+
+.progress-goal-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 8px rgba(255,255,255,0.45);
+  z-index: 2;
+  transform: translateX(-1px);
+}
+
+.progress-track.goal-reached .progress-goal-marker {
+  background: #10b981;
+  box-shadow: 0 0 10px rgba(16,185,129,0.6);
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 small,
 #progressText {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+#progressGoalText {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 /* ========== PACK GRID ========== */
@@ -1310,6 +1384,58 @@ header:not(.hero) nav a:hover {
   opacity: 0.7;
 }
 
+.subwinner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.subwinner-head label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#addSubwinnerBtn {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border-highlight);
+  box-shadow: none;
+  padding: 8px 12px;
+}
+
+#addSubwinnerBtn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.subwinner-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.subwinner-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.remove-subwinner-btn {
+  background: var(--surface-raised);
+  color: var(--danger-text);
+  border: 1px solid rgba(239,68,68,0.35);
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+.remove-subwinner-btn:hover:not(:disabled) {
+  background: rgba(239,68,68,0.18);
+}
+
 /* ========== ANIMATIONS ========== */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -1417,5 +1543,9 @@ header:not(.hero) nav a:hover {
   #checkout input[name="city"],
   #checkout button[type="submit"] {
     grid-column: auto !important;
+  }
+
+  .subwinner-row {
+    grid-template-columns: 1fr;
   }
 }

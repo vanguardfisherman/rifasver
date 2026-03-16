@@ -18,13 +18,50 @@ function formatCop(value) {
   return `$ ${Number(value).toLocaleString('es-CO')}`;
 }
 
+function getRequiredSalesPct() {
+  const parsed = Number(currentRaffle?.required_sales_pct);
+  if (Number.isFinite(parsed)) return Math.max(1, Math.min(100, Math.round(parsed)));
+  return 70;
+}
+
 function renderProgress() {
   const total = Number(currentRaffle.total_numbers);
   const soldCount = sold.size;
   const available = total - soldCount;
   const percent = total > 0 ? Math.round((soldCount / total) * 100) : 0;
-  $('#progressBar').style.width = `${percent}%`;
-  $('#progressText').textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} — ${available.toLocaleString('es-CO')} disponibles`;
+  const requiredPct = getRequiredSalesPct();
+  const reachedGoal = percent >= requiredPct;
+
+  const progressBar = $('#progressBar');
+  const progressTrack = document.querySelector('.progress-track');
+  const progressMarker = $('#progressGoalMarker');
+  const progressText = $('#progressText');
+  const progressGoalText = $('#progressGoalText');
+  const progressPercentBadge = $('#progressPercentBadge');
+
+  if (progressBar) {
+    progressBar.style.width = `${percent}%`;
+    progressBar.setAttribute('aria-valuenow', String(percent));
+  }
+
+  if (progressTrack) progressTrack.classList.toggle('goal-reached', reachedGoal);
+  if (progressMarker) progressMarker.style.left = `${requiredPct}%`;
+
+  if (progressText) {
+    progressText.textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} - ${available.toLocaleString('es-CO')} disponibles`;
+  }
+
+  if (progressGoalText) {
+    progressGoalText.textContent = reachedGoal
+      ? `Meta del ${requiredPct}% alcanzada. Ya puedes iniciar el sorteo.`
+      : `Meta para iniciar sorteo: ${requiredPct}% de ventas.`;
+  }
+
+  if (progressPercentBadge) {
+    progressPercentBadge.textContent = `${percent}%`;
+    progressPercentBadge.classList.toggle('goal-met', reachedGoal);
+    progressPercentBadge.classList.toggle('goal-pending', !reachedGoal);
+  }
 }
 
 function syncSticky() {

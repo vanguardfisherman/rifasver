@@ -47,10 +47,18 @@
         </div>
 
         <div class="progress-wrap">
+          <div class="progress-head">
+            <span class="progress-title">Progreso de ventas</span>
+            <span id="progressPercentBadge" class="progress-percent-badge">0%</span>
+          </div>
           <div class="progress-track">
+            <div id="progressGoalMarker" class="progress-goal-marker" aria-hidden="true"></div>
             <div id="progressBar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
-          <small id="progressText"></small>
+          <div class="progress-meta">
+            <small id="progressText"></small>
+            <small id="progressGoalText"></small>
+          </div>
         </div>
       </div>
 
