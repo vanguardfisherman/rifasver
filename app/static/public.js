@@ -96,10 +96,10 @@ function setQty(n) {
 
 function fillPackPrices() {
   const price = Number(currentRaffle.ticket_price || 0);
-  $('#pack2').textContent = formatCop(price * 2);
-  $('#pack5').textContent = formatCop(price * 5);
-  $('#pack10').textContent = formatCop(price * 10);
-  $('#pack100').textContent = formatCop(price * 100);
+  [100, 200, 400, 600, 800, 1000].forEach(q => {
+    const el = $(`#pack${q}`);
+    if (el) el.textContent = `${formatCop(price * q)} COP`;
+  });
 }
 
 function renderTicker(raffleInfoText) {
