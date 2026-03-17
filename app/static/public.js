@@ -144,14 +144,8 @@ async function onRaffleChange() {
   const id = currentRaffle.id;
   sold = new Set((await api(`/api/raffles/${id}/numbers`)).sold);
   quantity = 0;
-  const milestonesText = (currentRaffle.sales_milestones || '20,40,60,80')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => `${item}%`)
-    .join(' / ');
   $('#raffleTitle').textContent = currentRaffle.title;
-  $('#raffleInfo').textContent = `${currentRaffle.main_prize} | Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} | Minimo: ${currentRaffle.min_purchase} | Anticipos: ${milestonesText}`;
+  $('#raffleInfo').innerHTML = `<span class="info-badge prize-badge">${currentRaffle.main_prize}</span><span class="info-badge">${formatCop(currentRaffle.ticket_price)} / tiquete</span><span class="info-badge">Mín: ${currentRaffle.min_purchase}</span>`;
   const raffleInfo = `⭐ Premio: ${currentRaffle.main_prize} — Precio por tiquete: ${formatCop(currentRaffle.ticket_price)} — Mínimo: ${currentRaffle.min_purchase} tiquetes`;
   renderTicker(raffleInfo);
 
