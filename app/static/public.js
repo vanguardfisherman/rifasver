@@ -36,7 +36,6 @@ function renderProgress() {
   const progressTrack = document.querySelector('.progress-track');
   const progressMarker = $('#progressGoalMarker');
   const progressText = $('#progressText');
-  const progressGoalText = $('#progressGoalText');
   const progressPercentBadge = $('#progressPercentBadge');
 
   if (progressBar) {
@@ -49,12 +48,6 @@ function renderProgress() {
 
   if (progressText) {
     progressText.textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} - ${available.toLocaleString('es-CO')} disponibles`;
-  }
-
-  if (progressGoalText) {
-    progressGoalText.textContent = reachedGoal
-      ? `Meta del ${requiredPct}% alcanzada. Ya puedes iniciar el sorteo.`
-      : `Meta para iniciar sorteo: ${requiredPct}% de ventas.`;
   }
 
   if (progressPercentBadge) {
