@@ -7,6 +7,59 @@ let quantity = 0;
 let siteSettings = { whatsapp: '', email: '', ticker_items: [], winner_message: '', subwinner_message: '' };
 const DEFAULT_WHATSAPP = '573224620502';
 
+function showWinnerAlert(data) {
+  // data can be: { milestone_award: {...}, winning_numbers: [...] }
+  const milestone = data.milestone_award || null;
+  const drawWinners = data.winning_numbers || [];
+  if (!milestone && !drawWinners.length) return;
+
+  const modal = $('#winnerModal');
+  const body = $('#winnerModalBody');
+  if (!modal || !body) return;
+
+  let html = '';
+
+  if (milestone) {
+    html += `<p>¡Tu compra superó la meta del <strong>${milestone.milestone_pct}%</strong> de ventas y desbloqueaste un premio anticipado!</p>`;
+    html += `<div class="win-item">
+      <span class="win-item-icon">⭐</span>
+      <div class="win-item-text">
+        <div class="win-item-number">Número ${milestone.winning_number}</div>
+        <div class="win-item-label">SUBGANADOR — ${milestone.label}</div>
+      </div>
+    </div>`;
+  }
+
+  if (drawWinners.length) {
+    html += `<p>¡Compraste un número ganador del sorteo!</p>`;
+    html += drawWinners.map(w => {
+      const isMain = w.winner_type === 'main';
+      const icon = isMain ? '🏆' : '🎁';
+      const typeLabel = isMain ? 'GANADOR PRINCIPAL' : 'SUBGANADOR';
+      return `<div class="win-item">
+        <span class="win-item-icon">${icon}</span>
+        <div class="win-item-text">
+          <div class="win-item-number">Número ${w.number}</div>
+          <div class="win-item-label">${typeLabel} — ${w.label}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  body.innerHTML = html;
+  modal.style.display = 'flex';
+
+  const closeBtn = $('#winnerModalClose');
+  const closeFn = () => {
+    modal.style.display = 'none';
+    closeBtn.removeEventListener('click', closeFn);
+  };
+  closeBtn.addEventListener('click', closeFn);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeFn();
+  });
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
   const data = await res.json();
@@ -35,7 +88,6 @@ function renderProgress() {
   const progressBar = $('#progressBar');
   const progressTrack = document.querySelector('.progress-track');
   const progressMarker = $('#progressGoalMarker');
-  const progressText = $('#progressText');
   const progressPercentBadge = $('#progressPercentBadge');
 
   if (progressBar) {
@@ -45,10 +97,6 @@ function renderProgress() {
 
   if (progressTrack) progressTrack.classList.toggle('goal-reached', reachedGoal);
   if (progressMarker) progressMarker.style.left = `${requiredPct}%`;
-
-  if (progressText) {
-    progressText.textContent = `${soldCount.toLocaleString('es-CO')} vendidos de ${total.toLocaleString('es-CO')} - ${available.toLocaleString('es-CO')} disponibles`;
-  }
 
   if (progressPercentBadge) {
     progressPercentBadge.textContent = `${percent}%`;
@@ -249,6 +297,7 @@ async function buy(e) {
         ? ` Premio anticipado desbloqueado (${init.milestone_award.milestone_pct}%): numero ganador ${init.milestone_award.winning_number}.`
         : '';
       setMsg(msgEl, `Compra exitosa. Orden #${init.order_id}. Comprobante descargado.${numsStr}${milestoneStr}`, 'success');
+      showWinnerAlert({ milestone_award: init.milestone_award, winning_numbers: init.winning_numbers });
       await onRaffleChange();
       e.target.reset();
       return;
@@ -282,6 +331,7 @@ async function buy(e) {
           if (statusInfo.milestone_award) {
             milestoneStr = ` Premio anticipado desbloqueado (${statusInfo.milestone_award.milestone_pct}%): numero ganador ${statusInfo.milestone_award.winning_number}.`;
           }
+          showWinnerAlert({ milestone_award: statusInfo.milestone_award, winning_numbers: statusInfo.winning_numbers });
         } catch (_) {}
         setMsg(msgEl, `Pago aprobado. Orden #${init.order_id}.${milestoneStr}`, 'success');
         try { await downloadReceipt(init.order_id, customer.document); } catch (_) {}

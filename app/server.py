@@ -124,6 +124,21 @@ def maybe_award_milestone(cur, raffle_id: int, order_id: int, order_numbers):
     }
 
 
+def check_winning_numbers(cur, raffle_id: int, numbers):
+    """Check if any purchased numbers match draw_results or raffle_subprizes."""
+    if not numbers:
+        return []
+    cur.execute("SELECT winning_number, winner_type, label FROM draw_results WHERE raffle_id=%s", (raffle_id,))
+    draw_map = {}
+    for row in cur.fetchall():
+        draw_map[row["winning_number"]] = {"winner_type": row["winner_type"], "label": row["label"]}
+    hits = []
+    for n in numbers:
+        if n in draw_map:
+            hits.append({"number": n, "winner_type": draw_map[n]["winner_type"], "label": draw_map[n]["label"]})
+    return hits
+
+
 def wompi_integrity(reference: str, amount_in_cents: int, currency: str) -> str:
     text = f"{reference}{amount_in_cents}{currency}{WOMPI_INTEGRITY_SECRET}"
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -655,6 +670,17 @@ class Handler(BaseHTTPRequestHandler):
             milestone = cur.fetchone()
             if milestone:
                 data["milestone_award"] = to_dict(milestone)
+            cur.execute("SELECT number FROM order_numbers WHERE order_id=%s", (order_id,))
+            order_nums = [r["number"] for r in cur.fetchall()]
+            raffle_id_for_check = None
+            cur.execute("SELECT raffle_id FROM orders WHERE id=%s", (order_id,))
+            oid_row = cur.fetchone()
+            if oid_row:
+                raffle_id_for_check = oid_row["raffle_id"]
+            if raffle_id_for_check and order_nums:
+                winning_hits = check_winning_numbers(cur, raffle_id_for_check, order_nums)
+                if winning_hits:
+                    data["winning_numbers"] = winning_hits
             conn.close()
             return self._json(200, data)
 
@@ -841,11 +867,14 @@ class Handler(BaseHTTPRequestHandler):
                 [(order_id, raffle_id, n) for n in numbers],
             )
             milestone_award = maybe_award_milestone(cur, raffle_id, order_id, numbers)
+            winning_hits = check_winning_numbers(cur, raffle_id, numbers)
             conn.commit()
             conn.close()
             payload = {"order_id": order_id, "total": total, "numbers": numbers}
             if milestone_award:
                 payload["milestone_award"] = milestone_award
+            if winning_hits:
+                payload["winning_numbers"] = winning_hits
             return self._json(201, payload)
 
         if path == "/api/payments/init":
@@ -930,11 +959,14 @@ class Handler(BaseHTTPRequestHandler):
                     [(order_id, raffle_id, n) for n in numbers],
                 )
                 milestone_award = maybe_award_milestone(cur, raffle_id, order_id, numbers)
+                winning_hits = check_winning_numbers(cur, raffle_id, numbers)
                 conn.commit()
                 conn.close()
                 payload = {"mode": "simulated", "order_id": order_id, "total": total, "numbers": numbers}
                 if milestone_award:
                     payload["milestone_award"] = milestone_award
+                if winning_hits:
+                    payload["winning_numbers"] = winning_hits
                 return self._json(201, payload)
 
         if path == "/api/webhooks/wompi":

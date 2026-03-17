@@ -1905,3 +1905,136 @@ header:not(.hero) nav a:hover {
     height: 18px;
   }
 }
+
+/* ========== WINNER ALERT MODAL ========== */
+.winner-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeInOverlay 0.3s ease;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes floatPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.winner-modal {
+  background: linear-gradient(145deg, #0f172a, #1e293b);
+  border: 2px solid #f59e0b;
+  border-radius: 20px;
+  padding: 40px 32px 32px;
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(245, 158, 11, 0.25), 0 0 120px rgba(245, 158, 11, 0.1);
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+.winner-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.12), transparent 60%);
+  pointer-events: none;
+}
+
+.winner-modal-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+  animation: floatPulse 2s ease-in-out infinite;
+}
+
+.winner-modal-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #f59e0b;
+  margin: 0 0 16px;
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+}
+
+.winner-modal-body {
+  color: #e2e8f0;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.winner-modal-body .win-item {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.winner-modal-body .win-item-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.winner-modal-body .win-item-text {
+  text-align: left;
+}
+
+.winner-modal-body .win-item-number {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.winner-modal-body .win-item-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.winner-modal-btn {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0f172a;
+  border: none;
+  padding: 14px 40px;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
+}
+
+.winner-modal-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(245, 158, 11, 0.4);
+}
+
+@media (max-width: 480px) {
+  .winner-modal {
+    padding: 32px 20px 24px;
+  }
+  .winner-modal-icon {
+    font-size: 48px;
+  }
+  .winner-modal-title {
+    font-size: 1.3rem;
+  }
+}
