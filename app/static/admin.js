@@ -147,6 +147,7 @@ async function onRaffleSelect(){
   const subwinnerRows = $('#subwinnerRows');
   if (subwinnerRows) subwinnerRows.innerHTML = '';
   ensureSubwinnerRows();
+  await loadPackages();
 }
 
 async function saveRaffle(e){
@@ -501,6 +502,113 @@ async function runDbQuery() {
     $('#dbQueryOut').innerHTML = `<div style="color:var(--danger-text);padding:8px 0">${esc(err.message)}</div>`;
   } finally { btn.disabled = false; btn.textContent = '▶ Ejecutar'; }
 }
+
+// ===== PACKAGES MANAGEMENT =====
+function addPackageRow(quantity = '', isPopular = false) {
+  const wrap = $('#packagesRows');
+  if (!wrap) return;
+
+  const row = document.createElement('div');
+  row.className = 'package-row';
+
+  const qtyInput = document.createElement('input');
+  qtyInput.type = 'number';
+  qtyInput.min = '1';
+  qtyInput.placeholder = 'Cantidad';
+  qtyInput.value = quantity;
+  qtyInput.setAttribute('aria-label', 'Cantidad de tiquetes');
+  qtyInput.addEventListener('input', updatePackagePreviews);
+
+  const popularLabel = document.createElement('label');
+  const popularCheck = document.createElement('input');
+  popularCheck.type = 'checkbox';
+  popularCheck.checked = isPopular;
+  popularLabel.append(popularCheck, ' Popular');
+
+  const preview = document.createElement('span');
+  preview.className = 'pkg-price-preview';
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'remove-package-btn';
+  removeBtn.textContent = '✕';
+  removeBtn.addEventListener('click', () => {
+    row.remove();
+    updatePackagePreviews();
+  });
+
+  row.append(qtyInput, popularLabel, preview, removeBtn);
+  wrap.appendChild(row);
+  updatePackagePreviews();
+}
+
+function updatePackagePreviews() {
+  const price = currentRaffle ? Number(currentRaffle.ticket_price || 0) : 0;
+  document.querySelectorAll('#packagesRows .package-row').forEach(row => {
+    const qty = Number(row.querySelector('input[type="number"]').value || 0);
+    const preview = row.querySelector('.pkg-price-preview');
+    if (qty > 0 && price > 0) {
+      preview.textContent = `= $${(qty * price).toLocaleString('es-CO')} COP`;
+    } else {
+      preview.textContent = '';
+    }
+  });
+}
+
+async function loadPackages() {
+  if (!currentRaffle) return;
+  try {
+    const packages = await api(`/api/raffles/${currentRaffle.id}/packages`);
+    const wrap = $('#packagesRows');
+    wrap.innerHTML = '';
+    if (packages.length) {
+      packages.forEach(p => addPackageRow(p.quantity, p.is_popular));
+    } else {
+      // Default packages if none exist
+      [100, 200, 400, 600, 800, 1000].forEach((q, i) => addPackageRow(q, i === 1));
+    }
+  } catch(_) {
+    // Fallback defaults
+    const wrap = $('#packagesRows');
+    wrap.innerHTML = '';
+    [100, 200, 400, 600, 800, 1000].forEach((q, i) => addPackageRow(q, i === 1));
+  }
+}
+
+async function savePackages() {
+  if (!currentRaffle) {
+    setMsg($('#adminMsg'), 'No hay rifa seleccionada.', 'error');
+    return;
+  }
+  const btn = $('#savePackagesBtn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+  try {
+    const rows = document.querySelectorAll('#packagesRows .package-row');
+    const packages = [];
+    rows.forEach(row => {
+      const qty = Number(row.querySelector('input[type="number"]').value || 0);
+      const isPopular = row.querySelector('input[type="checkbox"]').checked;
+      if (qty > 0) {
+        packages.push({ quantity: qty, is_popular: isPopular });
+      }
+    });
+    if (!packages.length) throw new Error('Agrega al menos un paquete.');
+    await api(`/api/admin/raffles/${currentRaffle.id}/packages`, {
+      method: 'POST',
+      body: JSON.stringify({ packages }),
+    });
+    setMsg($('#adminMsg'), '✓ Paquetes actualizados', 'success');
+  } catch(err) {
+    setMsg($('#adminMsg'), `✗ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar paquetes';
+  }
+}
+
+$('#addPackageBtn').addEventListener('click', () => addPackageRow());
+$('#savePackagesBtn').addEventListener('click', savePackages);
 
 $('#adminLogin').addEventListener('submit', login);
 $('#raffleSelect').addEventListener('change', onRaffleSelect);

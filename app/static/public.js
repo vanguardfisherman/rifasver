@@ -94,12 +94,54 @@ function setQty(n) {
   updateSelInfo();
 }
 
-function fillPackPrices() {
+const CART_SVG = '<svg class="pack-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>';
+const HAND_SVG = '<svg class="pack-hand" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8.5a1.5 1.5 0 0 0-1.5-1.5H17V5.5A1.5 1.5 0 0 0 15.5 4h0A1.5 1.5 0 0 0 14 5.5V7h-1V3.5A1.5 1.5 0 0 0 11.5 2h0A1.5 1.5 0 0 0 10 3.5V7H9V5.5A1.5 1.5 0 0 0 7.5 4h0A1.5 1.5 0 0 0 6 5.5v7.17a3 3 0 0 0 .88 2.12l2.83 2.83A3 3 0 0 0 11.83 18.5H16a4 4 0 0 0 4-4z"/></svg>';
+
+function renderPackButtons(packages) {
   const price = Number(currentRaffle.ticket_price || 0);
-  [100, 200, 400, 600, 800, 1000].forEach(q => {
-    const el = $(`#pack${q}`);
-    if (el) el.textContent = `${formatCop(price * q)} COP`;
+  const grid = $('#packGrid');
+  grid.innerHTML = '';
+  packages.forEach(pkg => {
+    const qty = Number(pkg.quantity);
+    const isPopular = pkg.is_popular;
+    const total = formatCop(price * qty);
+    const btn = document.createElement('button');
+    btn.className = 'pack' + (isPopular ? ' popular' : '');
+    btn.type = 'button';
+    btn.dataset.q = qty;
+    btn.innerHTML = `${CART_SVG}<span class="pack-text"><strong>${qty.toLocaleString('es-CO')}</strong> ENTRADAS <b>${total} COP</b></span>${isPopular ? '<label>MÁS POPULAR</label>' : ''}${HAND_SVG}`;
+    btn.addEventListener('click', () => setQty(qty));
+    grid.appendChild(btn);
   });
+}
+
+async function loadPackages() {
+  try {
+    const packages = await api(`/api/raffles/${currentRaffle.id}/packages`);
+    if (packages.length) {
+      renderPackButtons(packages);
+    } else {
+      // Fallback default packages
+      const defaults = [
+        {quantity: 100, is_popular: false},
+        {quantity: 200, is_popular: true},
+        {quantity: 400, is_popular: false},
+        {quantity: 600, is_popular: false},
+        {quantity: 800, is_popular: false},
+        {quantity: 1000, is_popular: false},
+      ];
+      renderPackButtons(defaults);
+    }
+  } catch(_) {
+    renderPackButtons([
+      {quantity: 100, is_popular: false},
+      {quantity: 200, is_popular: true},
+      {quantity: 400, is_popular: false},
+      {quantity: 600, is_popular: false},
+      {quantity: 800, is_popular: false},
+      {quantity: 1000, is_popular: false},
+    ]);
+  }
 }
 
 function renderTicker(raffleInfoText) {
@@ -155,7 +197,7 @@ async function onRaffleChange() {
   const image = currentRaffle.image_url || 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&w=1200&q=80';
   $('#raffleImage').src = image;
 
-  fillPackPrices();
+  await loadPackages();
   renderProgress();
   $('#qtyInput').value = 0;
   updateSelInfo();
@@ -311,11 +353,6 @@ const _cart = $('#stickyCart');
 _cart.style.transform = 'translateY(100%)';
 _cart.style.opacity = '0';
 _cart.style.transition = 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease';
-
-// Pack buttons — set quantity
-document.querySelectorAll('.pack').forEach(btn => btn.addEventListener('click', () => {
-  setQty(Number(btn.dataset.q));
-}));
 
 // Quantity controls
 $('#qtyMinus').addEventListener('click', () => setQty(quantity - 1));

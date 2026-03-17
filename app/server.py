@@ -288,6 +288,18 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS raffle_packages (
+            id SERIAL PRIMARY KEY,
+            raffle_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            is_popular BOOLEAN NOT NULL DEFAULT FALSE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(raffle_id) REFERENCES raffles(id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             id SERIAL PRIMARY KEY,
             raffle_id INTEGER,
@@ -380,6 +392,11 @@ def init_db():
                 (raffle_id, "Subpremio 2", "$250.000", "editable_by_admin", now),
             ],
         )
+        default_packages = [(100, False, 0), (200, True, 1), (400, False, 2), (600, False, 3), (800, False, 4), (1000, False, 5)]
+        cur.executemany(
+            "INSERT INTO raffle_packages(raffle_id, quantity, is_popular, sort_order, created_at) VALUES(%s, %s, %s, %s, %s)",
+            [(raffle_id, qty, pop, sort, now) for qty, pop, sort in default_packages],
+        )
 
     conn.commit()
     conn.close()
@@ -414,7 +431,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -525,6 +542,13 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/raffles/") and path.endswith("/subprizes"):
             raffle_id = int(path.split("/")[3])
             cur.execute("SELECT * FROM raffle_subprizes WHERE raffle_id=%s ORDER BY id", (raffle_id,))
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, rows)
+
+        if path.startswith("/api/raffles/") and path.endswith("/packages"):
+            raffle_id = int(path.split("/")[3])
+            cur.execute("SELECT * FROM raffle_packages WHERE raffle_id=%s ORDER BY sort_order, id", (raffle_id,))
             rows = [to_dict(r) for r in cur.fetchall()]
             conn.close()
             return self._json(200, rows)
@@ -1001,6 +1025,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "Rifa no existe"})
 
             now = datetime.utcnow().isoformat()
+            cur.execute("DELETE FROM raffle_packages WHERE raffle_id=%s", (raffle_id,))
             cur.execute("DELETE FROM raffle_subprizes WHERE raffle_id=%s", (raffle_id,))
             cur.execute("DELETE FROM draw_results WHERE raffle_id=%s", (raffle_id,))
             cur.execute("DELETE FROM milestone_winners WHERE raffle_id=%s", (raffle_id,))
@@ -1030,6 +1055,28 @@ class Handler(BaseHTTPRequestHandler):
             cur.execute(
                 "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                 (raffle_id, "set_subprizes", json.dumps(data), now)
+            )
+            conn.commit()
+            conn.close()
+            return self._json(200, {"ok": True})
+
+        if path.startswith("/api/admin/raffles/") and path.endswith("/packages"):
+            raffle_id = int(path.split("/")[4])
+            packages = data.get("packages", [])
+            now = datetime.utcnow().isoformat()
+            cur.execute("DELETE FROM raffle_packages WHERE raffle_id=%s", (raffle_id,))
+            for idx, item in enumerate(packages):
+                qty = int(item.get("quantity", 0))
+                if qty < 1:
+                    continue
+                is_popular = bool(item.get("is_popular", False))
+                cur.execute(
+                    "INSERT INTO raffle_packages(raffle_id, quantity, is_popular, sort_order, created_at) VALUES(%s, %s, %s, %s, %s)",
+                    (raffle_id, qty, is_popular, idx, now),
+                )
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (raffle_id, "set_packages", json.dumps(data), now)
             )
             conn.commit()
             conn.close()

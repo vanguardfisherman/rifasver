@@ -100,6 +100,18 @@
       </div>
 
       <div class="admin-section">
+        <h3><span class="sub-icon">📦</span>Paquetes de tiquetes</h3>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">
+          Define los paquetes que se muestran a los compradores. El precio se calcula automáticamente (cantidad × precio por tiquete).
+        </p>
+        <div id="packagesRows" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button id="addPackageBtn" type="button" style="background:var(--surface-raised);color:var(--text);border:1px solid var(--border-highlight);box-shadow:none;padding:8px 12px;">+ Agregar paquete</button>
+          <button id="savePackagesBtn" type="button">Guardar paquetes</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
         <h3><span class="sub-icon">🏆</span>Publicar ganadores</h3>
         <form id="winnersForm">
           <input name="main" placeholder="Numero ganador principal (ej: 0042)" maxlength="4" aria-label="Numero ganador principal" required />
