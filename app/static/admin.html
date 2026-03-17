@@ -44,6 +44,26 @@
       <select id="raffleSelect" aria-label="Seleccionar rifa"></select>
 
       <div class="admin-section">
+        <h3><span class="sub-icon">➕</span>Crear nueva rifa</h3>
+        <form id="createRaffle">
+          <input name="title" placeholder="Titulo de la nueva rifa" required aria-label="Titulo nueva rifa" />
+          <input name="main_prize" placeholder="Premio principal" required aria-label="Premio principal nueva rifa" />
+          <input name="description" placeholder="Descripcion (opcional)" aria-label="Descripcion nueva rifa" />
+          <input name="total_numbers" type="number" min="1" placeholder="Total de numeros" required aria-label="Total numeros nueva rifa" />
+          <input name="ticket_price" type="number" min="1" placeholder="Precio por numero ($)" required aria-label="Precio nueva rifa" />
+          <input name="min_purchase" type="number" min="1" value="1" placeholder="Minimo de compra" required aria-label="Minimo compra nueva rifa" />
+          <input name="required_sales_pct" type="number" min="1" max="100" value="70" placeholder="Porcentaje minimo para iniciar sorteo (%)" required aria-label="Porcentaje minimo ventas nueva rifa" />
+          <input name="sales_milestones" value="20,40,60,80" placeholder="Hitos anticipados (ej: 20,40,60,80)" aria-label="Hitos anticipados nueva rifa" />
+          <input name="image_url" placeholder="URL imagen premio (opcional)" aria-label="Imagen nueva rifa" />
+          <select name="status" aria-label="Estado nueva rifa">
+            <option value="active">Activa</option>
+            <option value="closed">Cerrada</option>
+          </select>
+          <button type="submit">Crear rifa</button>
+        </form>
+      </div>
+
+      <div class="admin-section">
         <h3><span class="sub-icon">✏️</span>Editar rifa</h3>
         <form id="editRaffle">
           <input name="title" placeholder="Titulo de la rifa" required aria-label="Titulo de la rifa" />
@@ -59,6 +79,16 @@
           </select>
           <button type="submit">Guardar cambios</button>
         </form>
+      </div>
+
+      <div class="admin-section">
+        <h3><span class="sub-icon">♻️</span>Resetear rifa seleccionada</h3>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:10px;">
+          Esta accion borra subpremios, ventas, numeros vendidos, ganadores y premios anticipados de la rifa seleccionada.
+        </p>
+        <button id="resetRaffleBtn" type="button" style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:1px solid rgba(239,68,68,0.45);box-shadow:none;padding:10px 16px;">
+          Resetear rifa
+        </button>
       </div>
 
       <div class="admin-section">

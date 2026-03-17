@@ -109,18 +109,28 @@ async function login(e){
   }
 }
 
-async function loadRaffles(){
+async function loadRaffles(selectedRaffleId = null){
   raffles = await api('/api/raffles');
-  $('#raffleSelect').innerHTML = raffles.map(r=>`<option value="${r.id}">${r.title}</option>`).join('');
-  if (raffles.length){
-    $('#raffleSelect').value = raffles[0].id;
-    onRaffleSelect();
+  const select = $('#raffleSelect');
+  select.innerHTML = raffles.map(r=>`<option value="${r.id}">${r.title}</option>`).join('');
+
+  if (!raffles.length){
+    currentRaffle = null;
+    currentSubprizeLabels = [];
+    $('#subprizesInput').value = '';
+    return;
   }
+
+  const preferredId = Number(selectedRaffleId);
+  const hasPreferred = Number.isFinite(preferredId) && raffles.some(r => r.id === preferredId);
+  select.value = String(hasPreferred ? preferredId : raffles[0].id);
+  await onRaffleSelect();
 }
 
 async function onRaffleSelect(){
   const id = Number($('#raffleSelect').value);
-  currentRaffle = raffles.find(r=>r.id===id);
+  currentRaffle = raffles.find(r=>r.id===id) || null;
+  if (!currentRaffle) return;
   const form = $('#editRaffle');
   form.title.value = currentRaffle.title;
   form.main_prize.value = currentRaffle.main_prize;
@@ -144,12 +154,65 @@ async function saveRaffle(e){
   const btn = e.target.querySelector('button');
   btn.disabled = true;
   try{
+    if (!currentRaffle) throw new Error('No hay rifa seleccionada.');
     const payload = Object.fromEntries(new FormData(e.target).entries());
     await api(`/api/admin/raffles/${currentRaffle.id}`, {method:'PATCH', body: JSON.stringify(payload)});
     setMsg($('#adminMsg'), '✓ Rifa actualizada correctamente', 'success');
-    await loadRaffles();
+    await loadRaffles(currentRaffle.id);
   }catch(err){ setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }
   finally { btn.disabled = false; }
+}
+
+async function createRaffle(e){
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Creando...';
+  try {
+    const payload = Object.fromEntries(new FormData(e.target).entries());
+    const out = await api('/api/admin/raffles', {method:'POST', body: JSON.stringify(payload)});
+    setMsg($('#adminMsg'), 'Nueva rifa creada correctamente', 'success');
+    e.target.reset();
+    e.target.min_purchase.value = 1;
+    e.target.required_sales_pct.value = 70;
+    e.target.sales_milestones.value = '20,40,60,80';
+    await loadRaffles(out.id);
+  } catch(err) {
+    setMsg($('#adminMsg'), `Error: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear rifa';
+  }
+}
+
+async function resetRaffle(){
+  if (!currentRaffle) {
+    setMsg($('#adminMsg'), 'No hay rifa seleccionada para resetear.', 'error');
+    return;
+  }
+  const confirmation = prompt(`Escribe RESET para confirmar el reseteo de: ${currentRaffle.title}`);
+  if (confirmation !== 'RESET') {
+    setMsg($('#adminMsg'), 'Reset cancelado.', 'info');
+    return;
+  }
+
+  const btn = $('#resetRaffleBtn');
+  btn.disabled = true;
+  btn.textContent = 'Reseteando...';
+  try {
+    await api(`/api/admin/raffles/${currentRaffle.id}/reset`, {
+      method:'POST',
+      body: JSON.stringify({ confirm: 'RESET' }),
+    });
+    setMsg($('#adminMsg'), 'Rifa reseteada: subpremios, ventas y ganadores eliminados.', 'success');
+    await loadRaffles(currentRaffle.id);
+    await loadOrders();
+  } catch(err) {
+    setMsg($('#adminMsg'), `Error: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Resetear rifa';
+  }
 }
 
 async function saveSubprizes(e){
@@ -157,6 +220,7 @@ async function saveSubprizes(e){
   const btn = e.target.querySelector('button');
   btn.disabled = true;
   try{
+    if (!currentRaffle) throw new Error('No hay rifa seleccionada.');
     const lines = $('#subprizesInput').value.split('\n').map(s=>s.trim()).filter(Boolean);
     const subprizes = lines.map(line => {
       const [name, description=''] = line.split('|');
@@ -173,6 +237,7 @@ async function setWinners(e){
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   try{
+    if (!currentRaffle) throw new Error('No hay rifa seleccionada.');
     const fd = new FormData(e.target);
     const mainWinner = normalizeWinnerNumber(fd.get('main'));
     if (!mainWinner) throw new Error('Debes ingresar el numero ganador principal.');
@@ -439,7 +504,9 @@ async function runDbQuery() {
 
 $('#adminLogin').addEventListener('submit', login);
 $('#raffleSelect').addEventListener('change', onRaffleSelect);
+$('#createRaffle').addEventListener('submit', createRaffle);
 $('#editRaffle').addEventListener('submit', saveRaffle);
+$('#resetRaffleBtn').addEventListener('click', resetRaffle);
 $('#subprizesForm').addEventListener('submit', saveSubprizes);
 $('#winnersForm').addEventListener('submit', setWinners);
 $('#addSubwinnerBtn').addEventListener('click', () => addSubwinnerRow());

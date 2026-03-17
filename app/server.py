@@ -988,6 +988,35 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             return self._json(201, {"id": rid})
 
+        if path.startswith("/api/admin/raffles/") and path.endswith("/reset"):
+            raffle_id = int(path.split("/")[4])
+            if str(data.get("confirm", "")).strip().upper() != "RESET":
+                conn.close()
+                return self._json(400, {"error": "Confirmacion invalida. Debes enviar confirm=RESET"})
+
+            cur.execute("SELECT id, title FROM raffles WHERE id=%s", (raffle_id,))
+            raffle = cur.fetchone()
+            if not raffle:
+                conn.close()
+                return self._json(404, {"error": "Rifa no existe"})
+
+            now = datetime.utcnow().isoformat()
+            cur.execute("DELETE FROM raffle_subprizes WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM draw_results WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM milestone_winners WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM order_numbers WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM orders WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM audit_logs WHERE raffle_id=%s", (raffle_id,))
+            cur.execute("DELETE FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)")
+            cur.execute("UPDATE raffles SET status='active', updated_at=%s WHERE id=%s", (now, raffle_id))
+            cur.execute(
+                "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
+                (raffle_id, "reset_raffle", json.dumps({"title": raffle["title"]}), now)
+            )
+            conn.commit()
+            conn.close()
+            return self._json(200, {"ok": True, "raffle_id": raffle_id})
+
         if path.startswith("/api/admin/raffles/") and path.endswith("/subprizes"):
             raffle_id = int(path.split("/")[4])
             subprizes = data.get("subprizes", [])
