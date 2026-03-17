@@ -110,9 +110,12 @@ async function login(e){
 }
 
 async function loadRaffles(selectedRaffleId = null){
-  raffles = await api('/api/raffles');
+  raffles = await api('/api/admin/raffles');
   const select = $('#raffleSelect');
-  select.innerHTML = raffles.map(r=>`<option value="${r.id}">${r.title}</option>`).join('');
+  select.innerHTML = raffles.map(r => {
+    const tag = r.status === 'active' ? '🟢' : '⚪';
+    return `<option value="${r.id}">${tag} ${r.title}</option>`;
+  }).join('');
 
   if (!raffles.length){
     currentRaffle = null;
@@ -140,6 +143,9 @@ async function onRaffleSelect(){
   form.required_sales_pct.value = currentRaffle.required_sales_pct || 70;
   form.sales_milestones.value = currentRaffle.sales_milestones || '20,40,60,80';
   form.status.value = currentRaffle.status;
+
+  // Update status bar
+  updateRaffleStatusBar();
 
   const sub = await api(`/api/raffles/${id}/subprizes`);
   currentSubprizeLabels = sub.map(s => s.name).filter(Boolean);
@@ -607,6 +613,40 @@ async function savePackages() {
   }
 }
 
+function updateRaffleStatusBar() {
+  if (!currentRaffle) return;
+  const tag = $('#raffleStatusTag');
+  const btn = $('#activateRaffleBtn');
+  if (currentRaffle.status === 'active') {
+    tag.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(16,185,129,0.12);color:var(--success);border:1px solid rgba(16,185,129,0.25);">🟢 Activa — visible en el sitio</span>';
+    btn.style.display = 'none';
+  } else {
+    tag.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(100,116,139,0.12);color:var(--text-muted);border:1px solid rgba(100,116,139,0.25);">⚪ Cerrada — no visible</span>';
+    btn.style.display = '';
+  }
+}
+
+async function activateRaffle() {
+  if (!currentRaffle) return;
+  const btn = $('#activateRaffleBtn');
+  btn.disabled = true;
+  btn.textContent = 'Activando...';
+  try {
+    await api(`/api/admin/raffles/${currentRaffle.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active' }),
+    });
+    setMsg($('#adminMsg'), `✓ "${currentRaffle.title}" ahora está activa. Las demás rifas se cerraron automáticamente.`, 'success');
+    await loadRaffles(currentRaffle.id);
+  } catch(err) {
+    setMsg($('#adminMsg'), `✗ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🟢 Activar esta rifa en el sitio';
+  }
+}
+
+$('#activateRaffleBtn').addEventListener('click', activateRaffle);
 $('#addPackageBtn').addEventListener('click', () => addPackageRow());
 $('#savePackagesBtn').addEventListener('click', savePackages);
 

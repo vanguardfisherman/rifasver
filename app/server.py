@@ -527,6 +527,15 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if path == "/api/raffles":
+            cur.execute("SELECT * FROM raffles WHERE status='active' ORDER BY id DESC")
+            rows = [to_dict(r) for r in cur.fetchall()]
+            conn.close()
+            return self._json(200, rows)
+
+        if path == "/api/admin/raffles":
+            if not self._require_admin():
+                conn.close()
+                return self._json(401, {"error": "No autorizado"})
             cur.execute("SELECT * FROM raffles ORDER BY id DESC")
             rows = [to_dict(r) for r in cur.fetchall()]
             conn.close()
@@ -1004,6 +1013,9 @@ class Handler(BaseHTTPRequestHandler):
                 )
             )
             rid = cur.fetchone()["id"]
+            # If creating as active, deactivate all others
+            if data.get("status", "active") == "active":
+                cur.execute("UPDATE raffles SET status='closed' WHERE id != %s AND status='active'", (rid,))
             cur.execute(
                 "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                 (rid, "create_raffle", json.dumps(data), now)
@@ -1223,6 +1235,9 @@ class Handler(BaseHTTPRequestHandler):
             vals.append(datetime.utcnow().isoformat())
             vals.append(raffle_id)
             cur.execute(f"UPDATE raffles SET {', '.join(sets)} WHERE id=%s", vals)
+            # If status changed to active, deactivate all other raffles
+            if data.get("status") == "active":
+                cur.execute("UPDATE raffles SET status='closed' WHERE id != %s AND status='active'", (raffle_id,))
             cur.execute(
                 "INSERT INTO audit_logs(raffle_id, action, payload, created_at) VALUES(%s, %s, %s, %s)",
                 (raffle_id, "update_raffle", json.dumps(data), datetime.utcnow().isoformat())
