@@ -318,6 +318,8 @@ async function loadSettings(){
     if (!form) return;
     form.whatsapp.value = s.whatsapp || '';
     form.email.value = s.email || '';
+    form.winner_message.value = s.winner_message || '';
+    form.subwinner_message.value = s.subwinner_message || '';
     $('#tickerItemsInput').value = (s.ticker_items || []).join('\n');
   } catch(_) {}
 }
@@ -331,7 +333,13 @@ async function saveSettings(e){
     const ticker_items = (fd.get('ticker_items') || '').split('\n').map(s=>s.trim()).filter(Boolean);
     await api('/api/admin/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ whatsapp: fd.get('whatsapp'), email: fd.get('email'), ticker_items }),
+      body: JSON.stringify({
+        whatsapp: fd.get('whatsapp'),
+        email: fd.get('email'),
+        ticker_items,
+        winner_message: fd.get('winner_message') || '',
+        subwinner_message: fd.get('subwinner_message') || '',
+      }),
     });
     setMsg($('#adminMsg'), '✓ Configuración guardada', 'success');
   } catch(err) { setMsg($('#adminMsg'), `✗ ${err.message}`, 'error'); }

@@ -1043,34 +1043,108 @@ form button[type="submit"]:hover {
 /* ========== WINNERS ========== */
 .winners {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .wcard {
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  border-radius: var(--radius);
-  padding: 18px;
-  background: linear-gradient(135deg, var(--surface-raised) 0%, rgba(245, 158, 11, 0.03) 100%);
+  border: 1px solid rgba(30, 41, 59, 0.8);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #151e2d 0%, #111827 60%, #0f1520 100%);
   transition: var(--transition);
-  line-height: 1.7;
   position: relative;
   overflow: hidden;
-}
-
-.wcard::before {
-  content: '🏆';
-  position: absolute;
-  right: 14px;
-  top: 14px;
-  font-size: 20px;
-  opacity: 0.2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0;
 }
 
 .wcard:hover {
-  border-color: rgba(245, 158, 11, 0.4);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.35);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.12), 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.wcard-main {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* Top section with gift icon */
+.wcard-visual {
+  position: relative;
+  width: 100%;
+  padding: 24px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(245,158,11,0.06) 0%, transparent 100%);
+}
+
+/* Number badge floating at top */
+.wcard-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+.wcard-badge-main {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+}
+
+.wcard-badge-sub {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+}
+
+.wcard-badge-milestone {
+  background: var(--warning);
+  color: #000;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+}
+
+.wcard-badge-number {
+  font-size: 16px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Gift icon */
+.wcard-gift {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(245, 158, 11, 0.2));
+  margin-bottom: 4px;
+}
+
+/* Bottom info section */
+.wcard-info {
+  width: 100%;
+  padding: 14px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wcard-prize {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .wcard-label {
@@ -1079,25 +1153,58 @@ form button[type="submit"]:hover {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--warning);
-  margin-bottom: 6px;
-  display: block;
-}
-
-.wcard-number {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  display: block;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .wcard-owner {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .winners {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .wcard-gift {
+    font-size: 48px;
+  }
+
+  .wcard-badge {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+
+  .wcard-badge-number {
+    font-size: 14px;
+  }
+
+  .wcard-prize {
+    font-size: 15px;
+  }
+
+  .wcard-owner {
+    font-size: 12px;
+  }
+
+  .wcard-visual {
+    padding: 16px 10px 10px;
+  }
+
+  .wcard-info {
+    padding: 10px 10px 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .winners {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ========== LOOKUP ========== */
@@ -1750,10 +1857,6 @@ header:not(.hero) nav a:hover {
 
   #raffleTitle {
     font-size: 20px;
-  }
-
-  .winners {
-    grid-template-columns: 1fr;
   }
 
   #checkout {

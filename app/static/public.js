@@ -4,7 +4,7 @@ let raffles = [];
 let currentRaffle = null;
 let sold = new Set();
 let quantity = 0;
-let siteSettings = { whatsapp: '', email: '', ticker_items: [] };
+let siteSettings = { whatsapp: '', email: '', ticker_items: [], winner_message: '', subwinner_message: '' };
 const DEFAULT_WHATSAPP = '573224620502';
 
 async function api(path, options = {}) {
@@ -173,7 +173,7 @@ function applyContactSettings() {
 async function loadRaffles() {
   [raffles, siteSettings] = await Promise.all([
     api('/api/raffles'),
-    api('/api/settings').catch(() => ({ whatsapp: '', email: '', ticker_items: [] })),
+    api('/api/settings').catch(() => ({ whatsapp: '', email: '', ticker_items: [], winner_message: '', subwinner_message: '' })),
   ]);
   applyContactSettings();
   if (raffles.length) {
@@ -334,18 +334,57 @@ async function lookup() {
   }
 }
 
+function getWinnerBadgeClass(type) {
+  if (type === 'main') return 'wcard-badge-main';
+  if (type === 'milestone') return 'wcard-badge-milestone';
+  return 'wcard-badge-sub';
+}
+
+function getWinnerBadgeText(type) {
+  if (type === 'main') return 'GANADOR';
+  if (type === 'milestone') return 'ANTICIPADO';
+  return 'GANADOR';
+}
+
+function getWinnerGift(type) {
+  if (type === 'main') return '🎁';
+  if (type === 'milestone') return '⭐';
+  return '🎁';
+}
+
 async function renderWinners() {
   const winners = await api(`/api/raffles/${currentRaffle.id}/winners`);
   if (!winners.length) {
     $('#winners').innerHTML = '<div class="empty-state"><span class="empty-icon">🏆</span><p>Aun no hay ganadores publicados.</p></div>';
     return;
   }
-  $('#winners').innerHTML = winners.map(w => `
-    <div class="wcard">
-      <span class="wcard-label">${w.label}</span>
-      <span class="wcard-number">${w.winning_number}</span>
-      <span class="wcard-owner">👤 ${w.owner}</span>
-    </div>`).join('');
+
+  const mainMsg = siteSettings.winner_message || '';
+  const subMsg = siteSettings.subwinner_message || '';
+
+  $('#winners').innerHTML = winners.map(w => {
+    const isMain = w.winner_type === 'main';
+    const badgeClass = getWinnerBadgeClass(w.winner_type);
+    const badgeText = getWinnerBadgeText(w.winner_type);
+    const gift = getWinnerGift(w.winner_type);
+    const announcementMsg = isMain ? mainMsg : subMsg;
+    const prizeText = w.label || (isMain ? 'Premio principal' : 'Subpremio');
+
+    return `<div class="wcard${isMain ? ' wcard-main' : ''}">
+      <div class="wcard-visual">
+        <span class="wcard-badge ${badgeClass}">
+          ${badgeText} <span class="wcard-badge-number">${w.winning_number}</span>
+        </span>
+        <span class="wcard-gift">${gift}</span>
+      </div>
+      <div class="wcard-info">
+        <span class="wcard-prize">${prizeText}</span>
+        <span class="wcard-label">🎉 ${badgeText}</span>
+        <span class="wcard-owner">${w.owner}</span>
+        ${announcementMsg ? `<span style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic;">${announcementMsg}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // Init sticky cart hidden

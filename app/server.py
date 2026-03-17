@@ -324,7 +324,7 @@ def init_db():
         "📱 Consulta tus tiquetes en la sección Mis Entradas en cualquier momento",
     ])
     _now = datetime.utcnow().isoformat()
-    for _key, _val in [('whatsapp', ''), ('email', 'soporte@tuempresa.com'), ('ticker_items', default_ticker)]:
+    for _key, _val in [('whatsapp', ''), ('email', 'soporte@tuempresa.com'), ('ticker_items', default_ticker), ('winner_message', ''), ('subwinner_message', '')]:
         cur.execute(
             "INSERT INTO site_settings(key, value, updated_at) VALUES(%s, %s, %s) ON CONFLICT (key) DO NOTHING",
             (_key, _val, _now)
@@ -524,6 +524,8 @@ class Handler(BaseHTTPRequestHandler):
                 'whatsapp': rows.get('whatsapp', ''),
                 'email': rows.get('email', ''),
                 'ticker_items': json.loads(rows.get('ticker_items', '[]')),
+                'winner_message': rows.get('winner_message', ''),
+                'subwinner_message': rows.get('subwinner_message', ''),
             })
 
         if path == "/api/raffles":
@@ -1191,7 +1193,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/admin/settings":
             now = datetime.utcnow().isoformat()
-            for key in ('whatsapp', 'email'):
+            for key in ('whatsapp', 'email', 'winner_message', 'subwinner_message'):
                 if key in data:
                     val = str(data[key])
                     cur.execute(
