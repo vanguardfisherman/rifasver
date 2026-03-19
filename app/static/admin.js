@@ -5,6 +5,19 @@ let raffles = [];
 let currentRaffle = null;
 let currentSubprizeLabels = [];
 
+function updateImagePreview(url) {
+  const container = $('#raffleImagePreview');
+  const img = $('#raffleImagePreviewImg');
+  if (!container || !img) return;
+  if (url && url.trim()) {
+    img.src = url.trim();
+    container.style.display = 'block';
+    img.onerror = () => { container.style.display = 'none'; };
+  } else {
+    container.style.display = 'none';
+  }
+}
+
 function normalizeWinnerNumber(raw) {
   const digits = String(raw || '').replace(/\D/g, '').slice(-4);
   return digits ? digits.padStart(4, '0') : '';
@@ -142,6 +155,8 @@ async function onRaffleSelect(){
   form.min_purchase.value = currentRaffle.min_purchase;
   form.required_sales_pct.value = currentRaffle.required_sales_pct || 70;
   form.sales_milestones.value = currentRaffle.sales_milestones || '20,40,60,80';
+  form.image_url.value = currentRaffle.image_url || '';
+  updateImagePreview(currentRaffle.image_url);
   form.status.value = currentRaffle.status;
 
   // Update status bar
@@ -662,6 +677,7 @@ $('#adminLogin').addEventListener('submit', login);
 $('#raffleSelect').addEventListener('change', onRaffleSelect);
 $('#createRaffle').addEventListener('submit', createRaffle);
 $('#editRaffle').addEventListener('submit', saveRaffle);
+$('#editRaffle').image_url.addEventListener('input', (e) => updateImagePreview(e.target.value));
 $('#resetRaffleBtn').addEventListener('click', resetRaffle);
 $('#subprizesForm').addEventListener('submit', saveSubprizes);
 $('#winnersForm').addEventListener('submit', setWinners);

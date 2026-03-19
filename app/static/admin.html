@@ -79,6 +79,11 @@
           <input name="min_purchase" type="number" placeholder="Minimo de compra" required aria-label="Minimo compra" />
           <input name="required_sales_pct" type="number" min="1" max="100" placeholder="Porcentaje minimo de ventas para iniciar sorteo (%)" required aria-label="Porcentaje minimo de ventas" />
           <input name="sales_milestones" placeholder="Hitos de premios anticipados (ej: 20,40,60,80)" aria-label="Hitos de premios anticipados" />
+          <label style="color:var(--text-secondary);font-size:13px;margin-top:6px;">Imagen del premio</label>
+          <input name="image_url" placeholder="URL de la imagen del premio (https://...)" aria-label="URL imagen del premio" />
+          <div id="raffleImagePreview" style="margin:8px 0;text-align:center;display:none;">
+            <img id="raffleImagePreviewImg" style="max-width:100%;max-height:200px;border-radius:10px;border:1px solid var(--border);" alt="Preview" />
+          </div>
           <select name="status" aria-label="Estado de la rifa">
             <option value="active">Activa</option>
             <option value="closed">Cerrada</option>
